@@ -1,0 +1,5 @@
+.vscode
+ref
+tools
+*.o
+*.bin

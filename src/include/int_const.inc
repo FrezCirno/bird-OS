@@ -1,0 +1,5 @@
+INT_PORT_MASTER_CMD    equ   0x20
+INT_PORT_MASTER_DATA   equ   0x21
+INT_PORT_SLAVE_CMD     equ   0xA0
+INT_PORT_SLAVE_DATA    equ   0xA1
+INT_EOI                equ   0x20

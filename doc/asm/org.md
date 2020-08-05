@@ -1,0 +1,2 @@
+
+The org directive is available only in -f bin output format (and some exotic ones). It advises Nasm at what address the program is expected to be loaded - it does not cause it to be loaded there. If no org directive is given, Nasm defaults to org 0. In effect, the value given is added to the file offset of all labels/variables in the file. http://www.nasm.us/xdoc/2.11/html/nasmdoc7.html#section-7.1.1
