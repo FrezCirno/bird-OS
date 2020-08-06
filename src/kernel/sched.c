@@ -42,18 +42,26 @@ TASK task_table[NR_TASKS] = {{fooA, STACK_SIZE_TESTA, "TestA"},
                              {fooC, STACK_SIZE_TESTC, "TestC"}};
 // 以上, 需要执行的任务
 
+SHEET *win;
+
 void main() // 0x100da9
 {
     u32 memtotal = mm_init();
-
     init_video();
-    printstr("Memtest: ", PEN_BLUE);
-    printstr(itoa(memtotal, 10), PEN_BLUE);
-    printstr(" KB\n", PEN_BLUE);
-
     init_clock();
     init_keyboard();
     init_mouse();
+
+    win = sheet_alloc();
+    sheet_setbuf(win, (u8 *)mm_alloc_4k(160 * 68), 160, 68, -1);
+    drawWindowTo(win->buf, win->bxsize, win->bxsize, win->bysize, "Hello world!");
+
+    drawTextTo(win->buf, win->bxsize, 24, 28, "Memtest:     KB", PEN_BLUE);
+    drawTextTo(win->buf, win->bxsize, 24, 28 + 9 * fonts.Width,
+               itoa(memtotal, 10), PEN_BLUE);
+
+    sheet_updown(win, 1);
+    sheet_slide(win, 80, 72);
 
     TASK *pTask      = task_table;
     PROCESS *pProc   = proc_table;
@@ -65,8 +73,8 @@ void main() // 0x100da9
         pProc->pid = i;                   // pid
         strcpy(pProc->name, pTask->name); // name of the process
 
-        pProc->ldt_slt =
-            ldt_slt; // 选择子只要指定 LDT 描述符在  GDT 中的地址就够了
+        // 选择子只要指定 LDT 描述符在  GDT 中的地址就够了
+        pProc->ldt_slt = ldt_slt;
 
         // 初始化 GDT 中的 LDT 描述符
         set_desc(&gdt[pProc->ldt_slt >> 3],
@@ -131,8 +139,13 @@ void fooB()
 
 void fooC()
 {
+    int a = 0;
     while (1)
     {
+        a++;
+        fillRectTo(win->buf, win->bxsize, 20, 20, 60, 36, PEN_LIGHT_GRAY);
+        drawTextTo(win->buf, win->bxsize, 20, 20, itoa(a, 10), PEN_BLUE);
+        sheet_refresh_sheet(win, 20, 20, 120, 44);
         delay();
     }
 }

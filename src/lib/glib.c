@@ -15,7 +15,7 @@ u32 cur_x;
 u32 cur_y;
 
 SHTCTL *ctl;
-
+SHEET *bg;
 // 每个bank 0xa0000-0xb0000 共 0x10000 = 64K 字节
 // 显存一共800*600共 480000 字节
 // 8个bank
@@ -23,10 +23,17 @@ SHTCTL *ctl;
 
 u32 fontsmap[65536];
 
-const u8 cursor[16] = {0b10000000, 0b11000000, 0b11100000, 0b11110000,
-                       0b11111000, 0b11111100, 0b11111110, 0b11111111,
-                       0b11111000, 0b11011000, 0b00001100, 0b00000110,
-                       0b00000011};
+const u8 cursor[16] = {X_______, XX______, XXX_____, XXXX____, XXXXX___,
+                       XXXXXX__, XXXXXXX_, XXXXXXXX, XXXXX___, XX_XX___,
+                       ____XX__, ____XX__, _____XX_};
+
+const u8 closebtn[2][16] = {
+    {________, ________, ________, ____XX__, _____XX_, ______XX, _______X,
+     ______XX, _____XX_, ____XX__, ________, ________, ________},
+    {________, ________, ________, __XX____, _XX_____, XX______, X_______,
+     XX______, _XX_____, __XX____, ________, ________, ________}};
+
+#define abs(x) ((x) > 0 ? (x) : (-(x)))
 
 void init_video()
 {
@@ -39,7 +46,14 @@ void init_video()
     bga_set_bank(0);
     initPalette();
     cacheFonts();
+
     shtctl_init(scr_x, scr_y);
+
+    // 默认颜色背景
+    bg = sheet_alloc();
+    sheet_setbuf(bg, (u8 *)mm_alloc_4k(scr_x * scr_y), scr_x, scr_y, -1);
+    memset(bg->buf, PEN_BLACK, scr_x * scr_y);
+    sheet_updown(bg, 0);
 }
 
 void initPalette()
@@ -105,11 +119,121 @@ void putPixel(int x, int y, u8 color)
     vram[base & 0xffff] = color;
 }
 
+void drawLineTo(u8 *dst, int pitch, int x0, int y0, int x1, int y1, u8 color)
+{
+    // Bresenhamline算法
+    int dx  = x1 - x0;           // x偏移量
+    int dy  = y1 - y0;           // y偏移量
+    int ux  = (dx > 0 ? 1 : -1); // x伸展方向
+    int uy  = (dy > 0 ? 1 : -1); // y伸展方向
+    int dx2 = dx << 1;           // x偏移量乘2
+    int dy2 = dy << 1;           // y偏移量乘2
+    if (abs(dx) > abs(dy))
+    {                //以x为增量方向计算
+        int e = -dx; // e = -0.5 * 2 * dx,把e 用2 * dx* e替换
+        int y = y0;  //起点y坐标
+        for (int x = x0; x < x1; x += ux) //起点x坐标
+        {
+            putPixelTo(dst, pitch, x, y, color);
+            e = e + dy2; //来自 2*e*dx= 2*e*dx + 2dy  （原来是 e = e + k）
+            if (e > 0) // e是整数且大于0时表示要取右上的点（否则是右下的点）
+            {
+                y += uy;
+                e = e - dx2; // 2*e*dx = 2*e*dx - 2*dx  (原来是 e = e -1)
+            }
+        }
+    }
+    else
+    {                //以y为增量方向计算
+        int e = -dy; // e = -0.5 * 2 * dy,把e 用2 * dy* e替换
+        int x = x0;  //起点x坐标
+        for (int y = y0; y < y1; y += uy) //起点y坐标
+        {
+            putPixelTo(dst, pitch, x, y, color);
+            e = e + dx2; //来自 2*e*dy= 2*e*dy + 2dy  （原来是 e = e + k）
+            if (e > 0) // e是整数且大于0时表示要取右上的点（否则是右下的点）
+            {
+                x += ux;
+                e = e - dy2; // 2*e*dy = 2*e*dy - 2*dy  (原来是 e = e -1)
+            }
+        }
+    }
+}
+
+void drawLine(int x0, int y0, int x1, int y1, u8 color)
+{
+    // Bresenhamline算法
+    int dx  = x1 - x0;           // x偏移量
+    int dy  = y1 - y0;           // y偏移量
+    int ux  = (dx > 0 ? 1 : -1); // x伸展方向
+    int uy  = (dy > 0 ? 1 : -1); // y伸展方向
+    int dx2 = dx << 1;           // x偏移量乘2
+    int dy2 = dy << 1;           // y偏移量乘2
+    if (abs(dx) > abs(dy))
+    {                //以x为增量方向计算
+        int e = -dx; // e = -0.5 * 2 * dx,把e 用2 * dx* e替换
+        int y = y0;  //起点y坐标
+        for (int x = x0; x < x1; x += ux) //起点x坐标
+        {
+            putPixel(x, y, color);
+            e = e + dy2; //来自 2*e*dx= 2*e*dx + 2dy  （原来是 e = e + k）
+            if (e > 0) // e是整数且大于0时表示要取右上的点（否则是右下的点）
+            {
+                y += uy;
+                e = e - dx2; // 2*e*dx = 2*e*dx - 2*dx  (原来是 e = e -1)
+            }
+        }
+    }
+    else
+    {                //以y为增量方向计算
+        int e = -dy; // e = -0.5 * 2 * dy,把e 用2 * dy* e替换
+        int x = x0;  //起点x坐标
+        for (int y = y0; y < y1; y += uy) //起点y坐标
+        {
+            putPixel(x, y, color);
+            e = e + dx2; //来自 2*e*dy= 2*e*dy + 2dy  （原来是 e = e + k）
+            if (e > 0) // e是整数且大于0时表示要取右上的点（否则是右下的点）
+            {
+                x += ux;
+                e = e - dy2; // 2*e*dy = 2*e*dy - 2*dy  (原来是 e = e -1)
+            }
+        }
+    }
+}
+
+void drawRectTo(u8 *dst, int pitch, int x1, int y1, int x2, int y2, u8 color)
+{
+    for (int y = y1; y < y2; y++)
+    {
+        putPixelTo(dst, pitch, x1, y, color);
+        putPixelTo(dst, pitch, x2, y, color);
+    }
+    for (int x = x1; x < x2; x++)
+    {
+        putPixelTo(dst, pitch, x, y1, color);
+        putPixelTo(dst, pitch, x, y2, color);
+    }
+}
+
+void drawRect(int x1, int y1, int x2, int y2, u8 color)
+{
+    for (int y = y1; y < y2; y++)
+    {
+        putPixel(x1, y, color);
+        putPixel(x2, y, color);
+    }
+    for (int x = x1; x < x2; x++)
+    {
+        putPixel(x, y1, color);
+        putPixel(x, y2, color);
+    }
+}
+
 void fillRectTo(u8 *dst, int pitch, int x1, int y1, int x2, int y2, u8 color)
 {
-    for (int y = y1; y <= y2; y++)
+    for (int y = y1; y < y2; y++)
     {
-        for (int x = x1; x <= x2; x++)
+        for (int x = x1; x < x2; x++)
         {
             putPixelTo(dst, pitch, x, y, color);
         }
@@ -118,9 +242,9 @@ void fillRectTo(u8 *dst, int pitch, int x1, int y1, int x2, int y2, u8 color)
 
 void fillRect(int x1, int y1, int x2, int y2, u8 color)
 {
-    for (int y = y1; y <= y2; y++)
+    for (int y = y1; y < y2; y++)
     {
-        for (int x = x1; x <= x2; x++)
+        for (int x = x1; x < x2; x++)
         {
             putPixel(x, y, color);
         }
@@ -173,10 +297,25 @@ void drawGlyph(int x, int y, const u8 *glyph, u8 color)
     }
 }
 
+void drawCharTo(u8 *dst, int pitch, int x, int y, char ch, u8 color)
+{
+    const u8 *font_data = &fonts.Bitmap[16 * fontsmap[ch]];
+    drawGlyphTo(dst, pitch, x, y, font_data, color);
+}
+
 void drawChar(int x, int y, char ch, u8 color)
 {
     const u8 *font_data = &fonts.Bitmap[16 * fontsmap[ch]];
     drawGlyph(x, y, font_data, color);
+}
+
+void drawTextTo(u8 *dst, int pitch, int x, int y, const char *str, u8 color)
+{
+    while (*str)
+    {
+        drawCharTo(dst, pitch, x, y, *str++, color);
+        x += 8;
+    }
 }
 
 void drawText(int x, int y, const char *str, u8 color)
@@ -229,14 +368,19 @@ void printstr(const char *str, u8 color)
     }
 }
 
-void shtctl_init(int x_size, int y_size)
+int shtctl_init(int x_size, int y_size)
 {
     ctl = (SHTCTL *)mm_alloc_4k(sizeof(SHTCTL));
     if (ctl == 0)
     {
-        return;
+        return -1;
     }
-    ctl->vram  = vram;
+    ctl->map = (u8 *)mm_alloc_4k(x_size * y_size);
+    if (ctl->map == 0)
+    {
+        mm_free_4k(ctl, sizeof(MEMMAN));
+        return -1;
+    }
     ctl->xsize = x_size;
     ctl->ysize = y_size;
     ctl->top   = -1;
@@ -244,6 +388,7 @@ void shtctl_init(int x_size, int y_size)
     {
         ctl->_sheets[i].flags = 0;
     }
+    return 0;
 }
 
 SHEET *sheet_alloc()
@@ -271,16 +416,11 @@ void sheet_setbuf(SHEET *sht, u8 *buf, int xsize, int ysize, int col_inv)
 
 void sheet_updown(SHEET *sht, int height)
 {
-    int h, old = sht->height; /* 存储设置前的高度信息 */
-    if (height > ctl->top + 1)
-    {
-        height = ctl->top + 1;
-    }
-    if (height < -1)
-    {
-        height = -1;
-    }
-    sht->height = height; /* 设定高度 */
+    int old = sht->height;
+    // 边界处理
+    if (height > ctl->top + 1) height = ctl->top + 1;
+    if (height < -1) height = -1;
+    sht->height = height; // 设定高度
 
     /* 下面主要是进行sheets[ ]的重新排列 */
     if (old > height)
@@ -288,7 +428,7 @@ void sheet_updown(SHEET *sht, int height)
         if (height >= 0)
         {
             /* 把中间的往上提 */
-            for (h = old; h > height; h--)
+            for (int h = old; h > height; h--)
             {
                 ctl->sheets[h]         = ctl->sheets[h - 1];
                 ctl->sheets[h]->height = h;
@@ -300,7 +440,7 @@ void sheet_updown(SHEET *sht, int height)
             if (ctl->top > old)
             {
                 /* 把上面的降下来 */
-                for (h = old; h < ctl->top; h++)
+                for (int h = old; h < ctl->top; h++)
                 {
                     ctl->sheets[h]         = ctl->sheets[h + 1];
                     ctl->sheets[h]->height = h;
@@ -308,15 +448,16 @@ void sheet_updown(SHEET *sht, int height)
             }
             ctl->top--; /* 由于显示中的图层减少了一个，所以最上面的图层高度下降 */
         }
-        sheet_refreshsub(sht->vx0, sht->vy0, sht->vx0 + sht->bxsize,
-                         sht->vy0 + sht->bysize); /* 按新图层的信息重新绘制画面 */
+        sheet_refresh(sht->vx0, sht->vy0, sht->vx0 + sht->bxsize,
+                      sht->vy0 + sht->bysize, height,
+                      height); /* 按新图层的信息重新绘制画面 */
     }
     else if (old < height)
     { /* 比以前高 */
         if (old >= 0)
         {
             /* 把中间的拉下去 */
-            for (h = old; h < height; h++)
+            for (int h = old; h < height; h++)
             {
                 ctl->sheets[h]         = ctl->sheets[h + 1];
                 ctl->sheets[h]->height = h;
@@ -326,7 +467,7 @@ void sheet_updown(SHEET *sht, int height)
         else
         { /* 由隐藏状态转为显示状态 */
             /* 将已在上面的提上来 */
-            for (h = ctl->top; h >= height; h--)
+            for (int h = ctl->top; h >= height; h--)
             {
                 ctl->sheets[h + 1]         = ctl->sheets[h];
                 ctl->sheets[h + 1]->height = h + 1;
@@ -334,27 +475,38 @@ void sheet_updown(SHEET *sht, int height)
             ctl->sheets[height] = sht;
             ctl->top++; /* 由于已显示的图层增加了1个，所以最上面的图层高度增加 */
         }
-        sheet_refreshsub(sht->vx0, sht->vy0, sht->vx0 + sht->bxsize,
-                         sht->vy0 + sht->bysize); /* 按新图层信息重新绘制画面 */
+        sheet_refresh(sht->vx0, sht->vy0, sht->vx0 + sht->bxsize,
+                      sht->vy0 + sht->bysize, height,
+                      height); /* 按新图层信息重新绘制画面 */
     }
 }
 
-void sheet_refresh(SHEET *sht, int bx0, int by0, int bx1, int by1)
+void sheet_refresh_sheet(SHEET *sht, int bx0, int by0, int bx1, int by1)
 {
     if (sht->height >= 0)
     { /* 如果正在显示，则按新图层的信息刷新画面*/
-        sheet_refreshsub(sht->vx0 + bx0, sht->vy0 + by0, sht->vx0 + bx1,
-                         sht->vy0 + by1);
+        sheet_refresh(sht->vx0 + bx0, sht->vy0 + by0, sht->vx0 + bx1,
+                      sht->vy0 + by1, sht->height, sht->height);
     }
 }
 
-void sheet_refreshsub(int vx0, int vy0, int vx1, int vy1)
+void sheet_refresh(int vx0, int vy0, int vx1, int vy1, int h0, int h1)
 {
-    u8 *vram = ctl->vram;
-    for (int h = 0; h <= ctl->top; h++)
+
+    /* 如果refresh的范围超出了画面则修正 */
+    if (vx0 < 0) vx0 = 0;
+    if (vy0 < 0) vy0 = 0;
+    if (vx1 > ctl->xsize) vx1 = ctl->xsize;
+    if (vy1 > ctl->ysize) vy1 = ctl->ysize;
+    if (h1 > ctl->top) h1 = ctl->top;
+
+    for (int h = h0; h <= h1; h++)
     {
         SHEET *sht = ctl->sheets[h];
+        int sid    = (int)(sht - ctl->_sheets);
         u8 *buf    = sht->buf;
+        int *map   = ctl->map;
+
         /* 计算相对clipbox */
         int bx0 = vx0 - sht->vx0;
         int bx1 = vx1 - sht->vx0;
@@ -370,9 +522,14 @@ void sheet_refreshsub(int vx0, int vy0, int vx1, int vy1)
             int vy = sht->vy0 + by;
             for (int bx = bx0; bx < bx1; bx++)
             {
-                int vx   = sht->vx0 + bx;
-                u8 color = buf[by * sht->bxsize + bx];
+                int vx      = sht->vx0 + bx;
+                u8 color    = buf[by * sht->bxsize + bx];
+                int voffset = vy * ctl->xsize + vx;
                 if (color != sht->col_inv)
+                {
+                    map[voffset] = sid;
+                }
+                if (map[voffset] == sid)
                 {
                     putPixel(vx, vy, color);
                 }
@@ -388,9 +545,10 @@ void sheet_slide(SHEET *sht, int vx0, int vy0)
     sht->vy0 = vy0;
     if (sht->height >= 0)
     { /* 如果正在显示，则按新图层的信息刷新画面 */
-        sheet_refreshsub(old_vx0, old_vy0, old_vx0 + sht->bxsize,
-                         old_vy0 + sht->bysize);
-        sheet_refreshsub(vx0, vy0, vx0 + sht->bxsize, vy0 + sht->bysize);
+        sheet_refresh(old_vx0, old_vy0, old_vx0 + sht->bxsize,
+                      old_vy0 + sht->bysize, 0, sht->height - 1);
+        sheet_refresh(vx0, vy0, vx0 + sht->bxsize, vy0 + sht->bysize,
+                      sht->height, sht->height);
     }
 }
 
@@ -401,4 +559,26 @@ void sheet_free(SHEET *sht)
         sheet_updown(sht, -1); /* 如果处于显示状态，则先设定为隐藏 */
     }
     sht->flags = 0; /* "未使用"标志 */
+}
+
+void drawWindowTo(u8 *buf, int pitch, int xsize, int ysize, char *title)
+{
+    drawLineTo(buf, pitch, 0, 0, xsize, 0, PEN_LIGHT_GRAY);            // top
+    drawLineTo(buf, pitch, 1, 1, xsize - 1, 1, PEN_WHITE);             // top2
+    drawLineTo(buf, pitch, 0, 0, 0, ysize, PEN_LIGHT_GRAY);            // left
+    drawLineTo(buf, pitch, 1, 1, 1, ysize - 1, PEN_WHITE);             // left2
+    drawLineTo(buf, pitch, xsize - 1, 0, xsize - 1, ysize, PEN_BLACK); // right
+    drawLineTo(buf, pitch, xsize - 2, 1, xsize - 2, ysize - 1,
+               PEN_DARK_GRAY); // right2
+    drawLineTo(buf, pitch, 0, ysize - 1, xsize, ysize - 1,
+               PEN_BLACK); // bottom
+    drawLineTo(buf, pitch, 1, ysize - 2, xsize - 1, ysize - 2,
+               PEN_DARK_GRAY); // bottom2
+    fillRectTo(buf, pitch, 2, 2, xsize - 2, ysize - 2, PEN_LIGHT_GRAY); // body
+    fillRectTo(buf, pitch, 3, 3, xsize - 3, 20, PEN_DARK_CLAN); // header
+    drawTextTo(buf, pitch, 24, 4, title, PEN_WHITE);
+
+    fillRectTo(buf, pitch, xsize - 19, 5, xsize - 5, 18, PEN_LIGHT_GRAY);
+    drawGlyphTo(buf, pitch, xsize - 20, 5, closebtn[0], PEN_BLACK);
+    drawGlyphTo(buf, pitch, xsize - 20 + 8, 5, closebtn[1], PEN_BLACK);
 }

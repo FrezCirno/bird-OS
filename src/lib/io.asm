@@ -1,5 +1,8 @@
 global io_hlt
 global io_load_cr0, io_store_cr0
+global io_load_cr1, io_store_cr1
+global io_load_cr2, io_store_cr2
+global io_load_cr3, io_store_cr3
 global io_load_eflags, io_store_eflags
 global io_sti, io_cli
 global in8, in16, in32
@@ -37,6 +40,33 @@ io_load_cr0:
 io_store_cr0:
     mov eax, [esp+4]
     mov cr0, eax
+    ret
+
+io_load_cr1:
+    mov eax, cr1
+    ret
+
+io_store_cr1:
+    mov eax, [esp+4]
+    mov cr1, eax
+    ret
+
+io_load_cr2:
+    mov eax, cr2
+    ret
+
+io_store_cr2:
+    mov eax, [esp+4]
+    mov cr2, eax
+    ret
+
+io_load_cr3:
+    mov eax, cr3
+    ret
+
+io_store_cr3:
+    mov eax, [esp+4]
+    mov cr3, eax
     ret
 
 in8:

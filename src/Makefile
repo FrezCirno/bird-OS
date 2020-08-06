@@ -70,17 +70,17 @@ build.img : boot/boot0.bin boot/boot1.bin kernel.o
 	dd if=kernel.o of=build.img count=1152 seek=36 conv=notrunc
 
 
-all : build dump qemu gdb
+all : build dump qemu
 
 bochs :
 	echo c | bochs
 
 dump: build
-	objdump kernel.o -d > dump.txt
+	objdump -M intel kernel.o -d > dump.txt
 
 clean :
-	rm -f *.o boot/*.bin init/*.o int/*.o kernel/*.o lib/*.o mm/*.o
-	rm -f *.img
+	-rm -f *.o boot/*.bin init/*.o int/*.o kernel/*.o lib/*.o mm/*.o
+	-rm -f *.img
 
 qemu:
 	qemu-system-i386                                 \
@@ -95,7 +95,7 @@ qemu:
 	  -vga std &
 	#   -drive format=raw,media=cdrom,file=build.img   \
 	#   -serial stdio                                  \
-	#   -usb                                           \
-
-gdb:
+	#   -usb                                          
 	gdb kernel.o
+
+rebuild: clean build

@@ -10,10 +10,9 @@ void memcpy(void *dst, const void *src, s32 size)
 
 void memset(void *buf, u8 val, u32 size)
 {
-    u8 *p = (u8 *)buf;
     while (size--)
     {
-        *p++ = val;
+        *(u8 *)buf++ = val;
     }
 }
 

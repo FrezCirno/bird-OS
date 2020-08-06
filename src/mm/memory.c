@@ -1,8 +1,18 @@
 #include <memory.h>
+#include <string.h>
+#include <io.h>
 
-#define MEMMAN_ADDR 0x003c0000 // 内存分配表放置位置
+#define PDE_ADDR 0x1000 // PDE放置位置 大小 固定0x1000 必须按4KB对齐
+#define PTE_ADDR 0x200000 // PTE放置位置 大小 最大0x200000 必须按4KB对齐
+// 内核在0x100000
+// (希望页表没事)
+#define MEMMAN_ADDR 0x2000 // 内存分配表放置位置 大小 固定 0x7FE0
 
+u32 *pde       = (u32 *)PDE_ADDR;
+u32 *pte       = (u32 *)PTE_ADDR;
 MEMMAN *memman = (MEMMAN *)MEMMAN_ADDR;
+
+u8 *MemChkBuf;
 
 u32 mm_init()
 {
@@ -11,10 +21,32 @@ u32 mm_init()
     memman->lostsize = 0; /* 释放失败的内存的大小总和 */
     memman->losts    = 0; /* 释放失败次数 */
 
-    u32 memtotal = memtest(0x00400000, 0x00480000);
-    mm_free(0x00001000, 0x0009e000); /* 0x00001000 - 0x0009efff */
-    mm_free(0x00400000, memtotal - 0x00400000);
-    return memtotal;
+    u32 total   = 0;
+    u32 highest = 0;
+    u32 valid   = 0;
+
+    u32 *mem_buf_count = (u32 *)MemChkBuf;
+    u8 *mem_buf        = MemChkBuf + 4;
+
+    u32 ards_count = *mem_buf_count;
+    ARDStruct ards;
+    for (u32 i = 0; i < ards_count; i++)
+    {
+        memcpy(&ards, mem_buf, sizeof(ARDStruct));
+        mem_buf += sizeof(ARDStruct);
+        total += ards.LengthLow;
+        if (ards.Type == AddressRangeMemory)
+        {
+            valid += ards.LengthLow;
+            if (ards.BaseAddrLow + ards.LengthLow > highest)
+                highest = ards.BaseAddrLow + ards.LengthLow;
+        }
+    }
+    setup_paging(highest);
+
+    mm_free(0x400000, highest - 0x400000);
+
+    return total;
 }
 
 u32 mm_total()
@@ -128,15 +160,33 @@ int mm_free(u32 addr, u32 size)
 
 u32 mm_alloc_4k(u32 size)
 {
-    u32 a;
     size = (size + 0xfff) & 0xfffff000;
     return mm_alloc(size);
 }
 
 int mm_free_4k(u32 addr, u32 size)
 {
-    int i;
     size = (size + 0xfff) & 0xfffff000;
-    i    = mm_free(addr, size);
-    return i;
+    return mm_free(addr, size);
+}
+
+void setup_paging(u32 memsize)
+{
+    u32 pde_count = memsize >> 22;
+    if (memsize & 0x3FFFFF) pde_count++;
+    u32 pte_count = pde_count * 1024;
+
+    for (int i = 0; i < pde_count; i++)
+    {
+        pde[i] = (PTE_ADDR + (i << 12)) | PG_P | PG_RW; // 每个PTE占 4KB
+    }
+
+    for (int i = 0; i < pte_count; i++)
+    {
+        pte[i] = ((i << 12) | PG_P | PG_RW);
+    }
+
+    io_store_cr3(PDE_ADDR);
+    u32 cr0 = io_load_cr0();
+    io_store_cr0(cr0 | 0x80000000);
 }

@@ -42,13 +42,13 @@ void init_mouse()
     fifo_init(&mouse_in, MOUSE_BUF_SIZE, mouse_buf);
 
     mouse_sht = sheet_alloc();
-    sheet_setbuf(mouse_sht, mouse_sht_buf, 8, 16, 99); /* 透明色号99 */
-    fillRectTo(mouse_sht_buf, 8, 0, 0, 7, 15, 99);
+    sheet_setbuf(mouse_sht, mouse_sht_buf, 8, 16, 255); /* 透明色号255 */
+    fillRectTo(mouse_sht_buf, 8, 0, 0, 8, 16, 255);
     drawGlyphTo(mouse_sht_buf, 8, 0, 0, cursor, PEN_WHITE);
 
-    sheet_updown(mouse_sht, 1);
-
     sheet_slide(mouse_sht, mouse_x, mouse_y);
+
+    sheet_updown(mouse_sht, 2);
 
     put_irq_handler(INT_VECTOR_IRQ_MOUSE, mouse_handler);
     enable_irq(INT_VECTOR_IRQ_MOUSE);

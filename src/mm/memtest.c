@@ -5,7 +5,7 @@
 u32 memtest(u32 start, u32 end)
 {
     u8 flg486 = 0;
-    u32 eflg, cr0, i;
+    u32 eflg, cr0;
 
     /* 确认CPU是386还是486以上的 */
     eflg = io_load_eflags();
@@ -28,7 +28,7 @@ u32 memtest(u32 start, u32 end)
         io_store_cr0(cr0);
     }
 
-    i = memtest_sub(start, end);
+    u32 i = memtest_sub(start, end);
 
     if (flg486 != 0)
     {

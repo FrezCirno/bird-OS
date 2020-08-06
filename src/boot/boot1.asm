@@ -36,7 +36,7 @@ MemChkFail:
 MemChkOK:
 
 
-    ; 将位于1-0-1到32-1-18共576K/0x90000K的数据(kernel)加载到内存0xf000-0x9f000处
+    ; 将位于1-0-1到32-1-18共576K/0x90000的数据(kernel)加载到内存0xf000-0x9f000处
     mov ax, 0
     mov es, ax ; 目标地址
     mov bx, KERNEL_PRELOAD_ADDR ; 目标地址
@@ -130,9 +130,12 @@ protect:
     mov ss, ax
     mov esp, 0xf000
 
+    ; 前面用int 15h
     call GetMemSize
-    call SetupPaging
     call LoadKernel
+
+    ; 保存int 15h获取的内存信息
+    mov ebx, dwMCRNumber
 
     ; jump to os kernel
     jmp 8:KERNEL_LOAD_ADDR
@@ -176,85 +179,30 @@ GetMemSize:
 
     mov esi, MemChkBuf
     mov ecx, [dwMCRNumber] ;for(int i=0;i<[MCRNumber];i++) // 每次得到一个ARDS(Address Range Descriptor Structure)结构
-.3: ;{
-    mov edx, 5 ; for(int j=0;j<5;j++) // 每次得到一个ARDS中的成员，共5个成员
-    mov edi, ARDStruct ; { // 依次显示：BaseAddrLow，BaseAddrHigh，LengthLow，LengthHigh，Type
-.1: ;
-    push dword [esi] ;
+.getARDS: ;{
+    push ecx
+    mov edi, ARDStruct
+    mov ecx, 5
+    rep movsd
+    pop ecx
     
-    pop eax ;
-    stosd ; ARDStruct[j*4] = MemChkBuf[j*4];
-    add esi, 4 ;
-    dec edx ;
-    cmp edx, 0 ;
-    jnz .1 ; }
-    
-    cmp dword [dwType], 1 ; if(Type == AddressRangeMemory) // AddressRangeMemory : 1, AddressRangeReserved : 2
-    jne .2 ; {
-    mov eax, [dwBaseAddrLow] ;
-    add eax, [dwLengthLow] ;
-    cmp eax, [dwMemSize] ; if(BaseAddrLow + LengthLow > MemSize)
-    jb .2 ;
-    mov [dwMemSize], eax ; MemSize = BaseAddrLow + LengthLow;
-.2: ; }
-    loop .3 ;}
+    ; if(Type == AddressRangeMemory)
+    cmp dword [dwType], 1 
+    jne .invalid
+    ; if(BaseAddrLow + LengthLow > MemSize) MemSize = BaseAddrLow + LengthLow;
+    mov eax, [dwBaseAddrLow]
+    add eax, [dwLengthLow]
+    cmp eax, [dwMemSize]
+    jb .invalid
+    mov [dwMemSize], eax
+.invalid:
+    loop .getARDS
     
     pop ecx
     pop edi
     pop esi
     ret
 
-; ---------------------------------------------------------------------------
-; 启动分页机制
-; ------------------------------------------------------------------------
-SetupPaging:
-    ; 根据内存大小计算应初始化多少PDE以及多少页表
-    xor edx, edx
-    mov eax, [dwMemSize]
-    mov ebx, 400000h ; 400000h = 4M = 4096 * 1024, 一个页表对应的内存大小
-    div ebx
-    mov ecx, eax ; 此时 ecx 为页表的个数，也即 PDE 应该的个数
-    test edx, edx
-    jz .no_remainder
-    inc ecx ; 如果余数不为 0 就需增加一个页表
-.no_remainder:
-    push ecx ; 暂存页表个数
-
-    ; 为简化处理, 所有线性地址对应相等的物理地址. 并且不考虑内存空洞.
-
-    ; 首先初始化页目录
-    mov ax, 0x10
-    mov es, ax
-    mov edi, PDE_ADDR ; 此段首地址为 PDE_ADDR
-    xor eax, eax
-    mov eax, PTE_ADDR | PG_P | PG_RW
-.1:
-    stosd  ;  es[edi++] = eax
-    add eax, 0x1000 ; 为了简化, 所有页表在内存中是连续的.
-    loop .1
-
-    ; 再初始化所有页表
-    pop eax ; 页表个数
-    mov ebx, 1024 ; 每个页表 1024 个 PTE
-    mul ebx
-    mov ecx, eax ; PTE个数 = 页表个数 * 1024
-    mov edi, PTE_ADDR ; 此段首地址为 PTE_ADDR
-    xor eax, eax
-    mov eax, PG_P | PG_RW
-.2:
-    stosd
-    add eax, 4096 ; 每一页指向 4K 的空间
-    loop .2
-
-    mov eax, PDE_ADDR
-    mov cr3, eax
-    mov eax, cr0
-    or eax, 80000000h
-    mov cr0, eax
-    jmp short .3
-.3:
-    nop
-    ret
 ; ------------------------------------------------------------------------
 ; void* MemCpy(void* dst, void* src, int size);
 ; ------------------------------------------------------------------------
@@ -296,7 +244,6 @@ MemCpy:
 [SECTION .data]
 ALIGN 32
 
-dwMCRNumber:   dd   0 ; Memory Check Result
 dwMemSize:     dd   0
 ARDStruct:   ; Address Range Descriptor Structure
     dwBaseAddrLow:    dd   0
@@ -304,7 +251,8 @@ ARDStruct:   ; Address Range Descriptor Structure
     dwLengthLow:      dd   0
     dwLengthHigh:     dd   0
     dwType:           dd   0
-MemChkBuf:  times 256 db   0
+dwMCRNumber:   dd   0 ; ARDS count
+MemChkBuf:  times 256 db   0 ; ARDS
 
 gdt:   Descriptor  0, 0, 0 ; 8B 0x111d
        Descriptor  0, 0fffffh, DA_G | DA_D | DA_P | DA_DPL0 | DA_CXR   ; 4GB 32-bit DPL=0 内核代码段

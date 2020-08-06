@@ -18,7 +18,7 @@ typedef struct s_sheet
 
 typedef struct s_shtctl
 {
-    u8 *vram;
+    int *map; // 大小等于xsize*ysize, 用来表示每个像素属于哪个图层
     int xsize, ysize, top;
     SHEET *sheets[MAX_SHEETS];
     SHEET _sheets[MAX_SHEETS];
@@ -59,15 +59,27 @@ void putPixelTo(u8 *dst, int pitch, int x, int y, u8 color);
 
 void putPixel(int x, int y, u8 color);
 
+void drawRectTo(u8 *dst, int pitch, int x1, int y1, int x2, int y2, u8 color);
+
+void drawRect(int x1, int y1, int x2, int y2, u8 color);
+
 void fillRectTo(u8 *dst, int pitch, int x1, int y1, int x2, int y2, u8 color);
 
 void fillRect(int x1, int y1, int x2, int y2, u8 color);
+
+void drawLineTo(u8 *dst, int pitch, int x0, int y0, int x1, int y1, u8 color);
+
+void drawLine(int x0, int y0, int x1, int y1, u8 color);
 
 void drawGlyphTo(u8 *dst, int pitch, int x, int y, const u8 *glyph, u8 color);
 
 void drawGlyph(int x, int y, const u8 *glyph, u8 color);
 
+void drawCharTo(u8 *dst, int pitch, int x, int y, char ch, u8 color);
+
 void drawChar(int x, int y, char ch, u8 color);
+
+void drawTextTo(u8 *dst, int pitch, int x, int y, const char *str, u8 color);
 
 void drawText(int x, int y, const char *str, u8 color);
 
@@ -79,7 +91,7 @@ void putchar(char ch, u8 color);
 void printstr(const char *str, u8 color);
 
 // 图层控制, 在init_video中调用
-void shtctl_init(int x_size, int y_size);
+int shtctl_init(int x_size, int y_size);
 
 // 分配新的图层
 SHEET *sheet_alloc();
@@ -94,10 +106,12 @@ void sheet_slide(SHEET *sht, int vx0, int vy0);
 void sheet_updown(SHEET *sht, int height);
 
 // 刷新图层sht内部clipbox的屏幕区域
-void sheet_refresh(SHEET *sht, int bx0, int by0, int bx1, int by1);
+void sheet_refresh_sheet(SHEET *sht, int bx0, int by0, int bx1, int by1);
 
 // 刷新屏幕clipbox区域的所有图层
-void sheet_refreshsub(int vx0, int vy0, int vx1, int vy1);
+void sheet_refresh(int vx0, int vy0, int vx1, int vy1, int h0, int h1);
 
 // 释放图层
 void sheet_free(SHEET *sht);
+
+void drawWindowTo(u8 *buf, int pitch, int xsize, int ysize, char *title);

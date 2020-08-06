@@ -9,6 +9,15 @@ void io_store_eflags(u32 eflags);
 u32 io_load_cr0();
 void io_store_cr0(u32 cr0);
 
+u32 io_load_cr1();
+void io_store_cr1(u32 cr1);
+
+u32 io_load_cr2();
+void io_store_cr2(u32 cr0);
+
+u32 io_load_cr3();
+void io_store_cr3(u32 cr0);
+
 void io_sti();
 void io_cli();
 
