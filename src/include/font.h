@@ -1,6 +1,5 @@
 // (c) 2009, 2010 Lutz Sammer, License: AGPLv3
 #pragma once
-#include <types.h>
 
 #define ________ 0x00
 #define _______X 0x01
@@ -262,12 +261,12 @@
 /// bitmap font structure
 struct bitmap_font
 {
-    u8 Width;         ///< max. character width
-    u8 Height;        ///< character height
-    u16 Chars;        ///< number of characters in font
-    const u8 *Widths; ///< width of each character
-    const u16 *Index; ///< encoding to character index
-    const u8 *Bitmap; ///< bitmap of all characters
+    unsigned char Width;         ///< max. character width
+    unsigned char Height;        ///< character height
+    unsigned short Chars;        ///< number of characters in font
+    const unsigned char *Widths; ///< width of each character
+    const unsigned short *Index; ///< encoding to character index
+    const unsigned char *Bitmap; ///< bitmap of all characters
 };
 
 extern const struct bitmap_font fonts;

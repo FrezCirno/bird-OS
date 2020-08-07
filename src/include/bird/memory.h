@@ -1,19 +1,18 @@
 #pragma once
-#include <types.h>
 
 // memtest.c
 #define EFLAGS_AC_BIT     0x00040000
 #define CR0_CACHE_DISABLE 0x60000000
 
-u32 memtest_sub(u32 start, u32 end);
-u32 memtest(u32 start, u32 end);
+unsigned int memtest_sub(unsigned int start, unsigned int end);
+unsigned int memtest(unsigned int start, unsigned int end);
 
 // memory.c
 #define MEMMAN_FREES 4090 /* 大约是32KB*/
 
 typedef struct s_FREEINFO
 {
-    u32 addr, size;
+    unsigned int addr, size;
 } FREEINFO;
 
 typedef struct s_MEMMAN
@@ -22,27 +21,27 @@ typedef struct s_MEMMAN
     FREEINFO free[MEMMAN_FREES];
 } MEMMAN;
 
-u32 mm_init();
-u32 mm_total();
-u32 mm_alloc(u32 size);
-int mm_free(u32 addr, u32 size);
-u32 mm_alloc_4k(u32 size);
-int mm_free_4k(u32 addr, u32 size);
+unsigned int mm_init();
+unsigned int mm_total();
+unsigned int mm_alloc(unsigned int size);
+int mm_free(unsigned int addr, unsigned int size);
+unsigned int mm_alloc_4k(unsigned int size);
+int mm_free_4k(unsigned int addr, unsigned int size);
 
 typedef struct s_ard
 {
     // Address Range Descriptor Structure
-    u32 BaseAddrLow;
-    u32 BaseAddrHigh;
-    u32 LengthLow;
-    u32 LengthHigh;
-    u32 Type;
+    unsigned int BaseAddrLow;
+    unsigned int BaseAddrHigh;
+    unsigned int LengthLow;
+    unsigned int LengthHigh;
+    unsigned int Type;
 } ARDStruct;
 
 #define AddressRangeMemory 1 // OS可用
 // #define AddressRangeReserved 2
 
-extern u8 *MemChkBuf; // from boot1
+extern unsigned char *MemChkBuf; // from boot1
 
 // 分页机制
 #define PG_P   0x1   //   ; 页存在属性位
@@ -58,4 +57,4 @@ extern u8 *MemChkBuf; // from boot1
 #define PG_D   0x40 //
 #define PG_PAT 0x80 //
 
-void setup_paging(u32 memsize);
+void setup_paging(unsigned int memsize);

@@ -4,6 +4,7 @@
  */
 // 读: 先向INDEX PORT写入INDEX, 然后去DATA PORT读取DATA
 // 写: 先向INDEX PORT写入INDEX, 然后去DATA PORT写入新DATA
+#pragma once
 
 #define VBE_DISPI_IOPORT_INDEX 0x01CE
 #define VBE_DISPI_IOPORT_DATA  0x01CF
@@ -43,11 +44,11 @@
 #define VBE_DISPI_BPP_24 0x18
 #define VBE_DISPI_BPP_32 0x20
 
-extern u32 cur_bank;
-extern u32 bank_start, bank_end;
+extern unsigned int cur_bank;
+extern unsigned int bank_start, bank_end;
 
-void bga_write_register(u16 index, u16 data);
-u16 bga_read_register(u16 index);
-void bga_set_video_mode(u32 Width, u32 Height, u32 BitDepth, int use_lfb,
-                        int clear);
-void bga_set_bank(u16 BankNumber);
+void bga_write_register(unsigned short index, unsigned short data);
+unsigned short bga_read_register(unsigned short index);
+void bga_set_video_mode(unsigned int Width, unsigned int Height,
+                        unsigned int BitDepth, int use_lfb, int clear);
+void bga_set_bank(unsigned short BankNumber);

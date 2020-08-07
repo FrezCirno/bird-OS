@@ -1,75 +1,68 @@
-#include <types.h>
-#include <glib.h>    // drawText
-#include <string.h>  // memcpy
-#include <proc.h>    // NR_TASKS, PROCESS
-#include <syscall.h> // syscall
-#include <memory.h>  // memtest
+#include <bird/gui.h>    // drawText
+#include <bird/proc.h>   // NR_TASKS, PROCESS
+#include <bird/memory.h> // memtest
+#include <string.h>      // memcpy
 #include <clock.h>
 #include <keyboard.h>
 #include <mouse.h>
 
 PROCESS *next_proc;
 
-PROCESS proc_table[NR_TASKS];
+PROCESS proc_table[NR_TASKS + NR_PROCS];
 
-s32 k_reenter;
+int k_reenter;
 
-// 需要执行的任务
-
+void tty();
 void fooA();
 void fooB();
 void fooC();
 
-typedef struct s_task
-{
-    void (*initial_eip)();
-    int stacksize;
-    char name[32];
-} TASK;
-
 /* stacks of tasks */
-#define STACK_SIZE_TESTA 0x8000
-#define STACK_SIZE_TESTB 0x8000
-#define STACK_SIZE_TESTC 0x8000
-
-#define STACK_SIZE_TOTAL \
-    (STACK_SIZE_TESTA + STACK_SIZE_TESTB + STACK_SIZE_TESTC)
+#define STACK_SIZE_FOO   0x800
+#define STACK_SIZE_TOTAL 0x8000
 
 char task_stack[STACK_SIZE_TOTAL]; // 测试程序ABC公用的栈
 
-TASK task_table[NR_TASKS] = {{fooA, STACK_SIZE_TESTA, "TestA"},
-                             {fooB, STACK_SIZE_TESTB, "TestB"},
-                             {fooC, STACK_SIZE_TESTC, "TestC"}};
-// 以上, 需要执行的任务
+TASK task_table[NR_TASKS] = {{tty, STACK_SIZE_FOO, "tty"}};
 
-SHEET *win;
+TASK user_proc_table[NR_PROCS] = {{fooA, STACK_SIZE_FOO, "TestA"},
+                                  {fooB, STACK_SIZE_FOO, "TestB"},
+                                  {fooC, STACK_SIZE_FOO, "TestC"}};
 
-void main() // 0x100da9
+void main()
 {
-    u32 memtotal = mm_init();
+    unsigned int memtotal = mm_init();
     init_video();
     init_clock();
     init_keyboard();
     init_mouse();
-
-    win = sheet_alloc();
-    sheet_setbuf(win, (u8 *)mm_alloc_4k(160 * 68), 160, 68, -1);
-    drawWindowTo(win->buf, win->bxsize, win->bxsize, win->bysize, "Hello world!");
-
-    drawTextTo(win->buf, win->bxsize, 24, 28, "Memtest:     KB", PEN_BLUE);
-    drawTextTo(win->buf, win->bxsize, 24, 28 + 9 * fonts.Width,
-               itoa(memtotal, 10), PEN_BLUE);
-
-    sheet_updown(win, 1);
-    sheet_slide(win, 80, 72);
 
     TASK *pTask      = task_table;
     PROCESS *pProc   = proc_table;
     char *pTaskStack = task_stack + STACK_SIZE_TOTAL;
     SELECTOR ldt_slt = SELECTOR_LDT_FIRST;
 
-    for (int i = 0; i < NR_TASKS; i++)
+    unsigned char privilege;
+    unsigned char rpl;
+    int eflags;
+
+    for (int i = 0; i < NR_TASKS + NR_PROCS; i++)
     {
+        if (i < NR_TASKS)
+        {
+            pTask     = task_table + i;
+            privilege = RPL_TASK;
+            rpl       = RPL_TASK;
+            eflags    = 0x1202; /* IF=1, IOPL=1 */
+        }
+        else
+        {
+            pTask     = user_proc_table + i - NR_TASKS;
+            privilege = RPL_TASK;
+            rpl       = RPL_TASK;
+            eflags    = 0x1202;
+        }
+
         pProc->pid = i;                   // pid
         strcpy(pProc->name, pTask->name); // name of the process
 
@@ -77,32 +70,38 @@ void main() // 0x100da9
         pProc->ldt_slt = ldt_slt;
 
         // 初始化 GDT 中的 LDT 描述符
-        set_desc(&gdt[pProc->ldt_slt >> 3],
-                 vir2phys(seg2phys(SELECTOR_KERNEL_DS), pProc->ldt),
-                 LDT_SIZE * sizeof(DESCRIPTOR) - 1, DA_P | DA_LDT);
+        set_seg_desc(&gdt[pProc->ldt_slt >> 3],
+                     vir2phys(seg2phys(SELECTOR_KERNEL_DS), pProc->ldt),
+                     LDT_SIZE * sizeof(DESCRIPTOR) - 1, DA_P | DA_LDT);
 
         // 把GDT的代码段描述符拷贝到进程LDT[0]里
         memcpy(&pProc->ldt[0], &gdt[INDEX_FLAT_C], sizeof(DESCRIPTOR));
-        pProc->ldt[0].attr1 = DA_P | DA_CXO | RPL_TASK << 5;
+        pProc->ldt[0].attr1 = DA_P | DA_CXO | rpl << 5;
         // 把GDT的数据段描述符拷贝到进程LDT[1]里
         memcpy(&pProc->ldt[1], &gdt[INDEX_FLAT_RW], sizeof(DESCRIPTOR));
-        pProc->ldt[1].attr1 = DA_P | DA_DRW | RPL_TASK << 5;
+        pProc->ldt[1].attr1 = DA_P | DA_DRW | rpl << 5;
+
         // 段选择子(因为使用LDT故设置TI位)
-        pProc->regs.cs     = (8 * 0) | SA_TI | RPL_TASK;
-        pProc->regs.ds     = (8 * 1) | SA_TI | RPL_TASK;
-        pProc->regs.es     = (8 * 1) | SA_TI | RPL_TASK;
-        pProc->regs.fs     = (8 * 1) | SA_TI | RPL_TASK;
-        pProc->regs.ss     = (8 * 1) | SA_TI | RPL_TASK;
-        pProc->regs.gs     = SELECTOR_KERNEL_GS | RPL_TASK;
-        pProc->regs.eip    = (u32)pTask->initial_eip;
-        pProc->regs.esp    = (u32)pTaskStack;
-        pProc->regs.eflags = 0x1202; /* IF=1, IOPL=1 */
+        pProc->regs.cs     = (8 * 0) | SA_TI | rpl;
+        pProc->regs.ds     = (8 * 1) | SA_TI | rpl;
+        pProc->regs.es     = (8 * 1) | SA_TI | rpl;
+        pProc->regs.fs     = (8 * 1) | SA_TI | rpl;
+        pProc->regs.ss     = (8 * 1) | SA_TI | rpl;
+        pProc->regs.gs     = SELECTOR_KERNEL_GS | rpl;
+        pProc->regs.eip    = (unsigned int)pTask->initial_eip;
+        pProc->regs.esp    = (unsigned int)pTaskStack;
+        pProc->regs.eflags = eflags;
 
         pTaskStack -= pTask->stacksize;
         pProc++;
         pTask++;
         ldt_slt += 8;
     }
+
+    proc_table[0].ticks = proc_table[0].priority = 5;
+    proc_table[1].ticks = proc_table[1].priority = 5;
+    proc_table[2].ticks = proc_table[2].priority = 5;
+    proc_table[3].ticks = proc_table[3].priority = 5;
 
     k_reenter = 0;
 
@@ -114,11 +113,54 @@ void main() // 0x100da9
         ;
 }
 
+void schedule()
+{
+    int greatest_ticks = 0;
+
+    while (!greatest_ticks)
+    {
+        for (PROCESS *p = proc_table; p < proc_table + NR_TASKS + NR_PROCS; p++)
+        {
+            if (p->ticks > greatest_ticks)
+            {
+                greatest_ticks = p->ticks;
+                next_proc      = p;
+            }
+        }
+
+        if (!greatest_ticks)
+        {
+            for (PROCESS *p = proc_table; p < proc_table + NR_TASKS + NR_PROCS;
+                 p++)
+            {
+                p->ticks = p->priority;
+            }
+        }
+    }
+}
+
 // 以下是测试程序ABC
 void delay()
 {
     for (int i = 0; i < 100000; i++)
         ;
+}
+
+void tty()
+{
+    int a = 0;
+
+    WINDOW *win = createWindow(120, 200, 320, 200, "tty", 0);
+    while (1)
+    {
+        a++;
+        fillRectTo(win->body.buf, win->body.bxsize, 0, 0, 15 * fonts.Width,
+                   fonts.Height, PEN_LIGHT_GRAY);
+        drawTextTo(win->body.buf, win->body.bxsize, 0, 0, itoa(a, 10),
+                   PEN_LIGHT_BLUE);
+        refresh_local(win->sht, 0, 0, win->sht->bxsize, win->sht->bysize);
+        delay();
+    }
 }
 
 void fooA()
@@ -139,13 +181,16 @@ void fooB()
 
 void fooC()
 {
-    int a = 0;
+    WINDOW *win = createWindow(120, 120, 160, 68, "fooC", 0);
+
+    int i = 0;
     while (1)
     {
-        a++;
-        fillRectTo(win->buf, win->bxsize, 20, 20, 60, 36, PEN_LIGHT_GRAY);
-        drawTextTo(win->buf, win->bxsize, 20, 20, itoa(a, 10), PEN_BLUE);
-        sheet_refresh_sheet(win, 20, 20, 120, 44);
-        delay();
+        fillRectTo(win->body.buf, win->body.bxsize, 0, 0, 15 * fonts.Width,
+                   fonts.Height, PEN_LIGHT_GRAY);
+        drawTextTo(win->body.buf, win->body.bxsize, 0, 0, itoa(i, 10),
+                   PEN_LIGHT_BLUE);
+        refresh_local(win->sht, 0, 0, win->sht->bxsize, win->sht->bysize);
+        i++;
     }
 }

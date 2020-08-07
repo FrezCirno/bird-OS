@@ -1,7 +1,6 @@
-#include <types.h>
 #include <buffer.h>
 
-void fifo_init(FIFO_BUFFER *fifo, int size, u8 *buf)
+void fifo_init(FIFO_BUFFER *fifo, int size, unsigned char *buf)
 {
     fifo->buf      = buf;
     fifo->p_head   = buf;
@@ -11,7 +10,7 @@ void fifo_init(FIFO_BUFFER *fifo, int size, u8 *buf)
     fifo->flags    = 0;
 }
 
-int fifo_push(FIFO_BUFFER *fifo, u8 data)
+int fifo_push(FIFO_BUFFER *fifo, unsigned char data)
 {
     if (fifo->size >= fifo->capacity)
     {

@@ -1,36 +1,37 @@
-#include <memory.h>
+#include <asm/io.h>
+#include <bird/memory.h>
 #include <string.h>
-#include <io.h>
+#include <protect.h>
 
-#define PDE_ADDR 0x1000 // PDE放置位置 大小 固定0x1000 必须按4KB对齐
-#define PTE_ADDR 0x200000 // PTE放置位置 大小 最大0x200000 必须按4KB对齐
+#define PDE_ADDR 0x200000 // PDE放置位置 大小 固定0x1000 必须按4KB对齐
 // 内核在0x100000
+#define PTE_ADDR 0x400000 // PTE放置位置 大小 最大0x200000 必须按4KB对齐
 // (希望页表没事)
 #define MEMMAN_ADDR 0x2000 // 内存分配表放置位置 大小 固定 0x7FE0
 
-u32 *pde       = (u32 *)PDE_ADDR;
-u32 *pte       = (u32 *)PTE_ADDR;
-MEMMAN *memman = (MEMMAN *)MEMMAN_ADDR;
+unsigned int *pde = (unsigned int *)PDE_ADDR;
+unsigned int *pte = (unsigned int *)PTE_ADDR;
+MEMMAN *memman    = (MEMMAN *)MEMMAN_ADDR;
 
-u8 *MemChkBuf;
+unsigned char *MemChkBuf;
 
-u32 mm_init()
+unsigned int mm_init()
 {
     memman->frees    = 0; /* 可用信息数目 */
     memman->maxfrees = 0; /* 用于观察可用状况：frees的最大值 */
     memman->lostsize = 0; /* 释放失败的内存的大小总和 */
     memman->losts    = 0; /* 释放失败次数 */
 
-    u32 total   = 0;
-    u32 highest = 0;
-    u32 valid   = 0;
+    unsigned int total   = 0;
+    unsigned int highest = 0;
+    unsigned int valid   = 0;
 
-    u32 *mem_buf_count = (u32 *)MemChkBuf;
-    u8 *mem_buf        = MemChkBuf + 4;
+    unsigned int *mem_buf_count = (unsigned int *)MemChkBuf;
+    unsigned char *mem_buf      = MemChkBuf + 4;
 
-    u32 ards_count = *mem_buf_count;
+    unsigned int ards_count = *mem_buf_count;
     ARDStruct ards;
-    for (u32 i = 0; i < ards_count; i++)
+    for (unsigned int i = 0; i < ards_count; i++)
     {
         memcpy(&ards, mem_buf, sizeof(ARDStruct));
         mem_buf += sizeof(ARDStruct);
@@ -42,16 +43,16 @@ u32 mm_init()
                 highest = ards.BaseAddrLow + ards.LengthLow;
         }
     }
-    setup_paging(highest);
+    // setup_paging(highest);
 
     mm_free(0x400000, highest - 0x400000);
 
     return total;
 }
 
-u32 mm_total()
+unsigned int mm_total()
 {
-    u32 i, t = 0;
+    unsigned int i, t = 0;
     for (i = 0; i < memman->frees; i++)
     {
         t += memman->free[i].size;
@@ -59,14 +60,14 @@ u32 mm_total()
     return t;
 }
 
-u32 mm_alloc(u32 size)
+unsigned int mm_alloc(unsigned int size)
 {
     for (int i = 0; i < memman->frees; i++)
     {
         if (memman->free[i].size >= size)
         {
             /* 找到了足够大的内存 */
-            u32 a = memman->free[i].addr;
+            unsigned int a = memman->free[i].addr;
             memman->free[i].addr += size;
             memman->free[i].size -= size;
             if (memman->free[i].size == 0)
@@ -84,7 +85,7 @@ u32 mm_alloc(u32 size)
     return 0; /* 没有可用空间 */
 }
 
-int mm_free(u32 addr, u32 size)
+int mm_free(unsigned int addr, unsigned int size)
 {
     int i, j;
     /* 为便于归纳内存，将free[]按照addr的顺序排列 */
@@ -158,35 +159,35 @@ int mm_free(u32 addr, u32 size)
     return -1; /* 失败 */
 }
 
-u32 mm_alloc_4k(u32 size)
+unsigned int mm_alloc_4k(unsigned int size)
 {
     size = (size + 0xfff) & 0xfffff000;
     return mm_alloc(size);
 }
 
-int mm_free_4k(u32 addr, u32 size)
+int mm_free_4k(unsigned int addr, unsigned int size)
 {
     size = (size + 0xfff) & 0xfffff000;
     return mm_free(addr, size);
 }
 
-void setup_paging(u32 memsize)
+void setup_paging(unsigned int memsize)
 {
-    u32 pde_count = memsize >> 22;
+    unsigned int pde_count = memsize >> 22;
     if (memsize & 0x3FFFFF) pde_count++;
-    u32 pte_count = pde_count * 1024;
+    unsigned int pte_count = pde_count * 1024;
 
     for (int i = 0; i < pde_count; i++)
     {
         pde[i] = (PTE_ADDR + (i << 12)) | PG_P | PG_RW; // 每个PTE占 4KB
     }
-
+    
     for (int i = 0; i < pte_count; i++)
     {
         pte[i] = ((i << 12) | PG_P | PG_RW);
     }
 
     io_store_cr3(PDE_ADDR);
-    u32 cr0 = io_load_cr0();
+    unsigned int cr0 = io_load_cr0();
     io_store_cr0(cr0 | 0x80000000);
 }

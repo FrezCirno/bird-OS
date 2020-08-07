@@ -1,39 +1,41 @@
-#include <types.h>
-#include <io.h>
+#include <asm/io.h>
+#include <bird/memory.h>
 #include <glib.h>
 #include <string.h>
 #include <font.h>
-#include <memory.h>
 
-u8 *vram = (u8 *)0xa0000;
-u32 scr_x;
-u32 scr_y;
-u32 scr_bpp;
-u32 scr_pitch;
+unsigned char *vram = (unsigned char *)0xa0000;
+int scr_x;
+int scr_y;
+int scr_bpp;
+int scr_pitch;
 
-u32 cur_x;
-u32 cur_y;
+int cur_x;
+int cur_y;
 
-SHTCTL *ctl;
-SHEET *bg;
-// 每个bank 0xa0000-0xb0000 共 0x10000 = 64K 字节
-// 显存一共800*600共 480000 字节
-// 8个bank
-// bank n offset m <-> (n << 16) | m <-> 0xa0000 | m
+int fontsmap[65536];
 
-u32 fontsmap[65536];
+const unsigned char cursor[16] = {
+    X_______, XX______, XXX_____, XXXX____, XXXXX___, XXXXXX__, XXXXXXX_,
+    XXXXXXXX, XXXXX___, XX_XX___, ____XX__, ____XX__, _____XX_};
 
-const u8 cursor[16] = {X_______, XX______, XXX_____, XXXX____, XXXXX___,
-                       XXXXXX__, XXXXXXX_, XXXXXXXX, XXXXX___, XX_XX___,
-                       ____XX__, ____XX__, _____XX_};
-
-const u8 closebtn[2][16] = {
+const unsigned char closebtn[2][16] = {
     {________, ________, ________, ____XX__, _____XX_, ______XX, _______X,
      ______XX, _____XX_, ____XX__, ________, ________, ________},
     {________, ________, ________, __XX____, _XX_____, XX______, X_______,
      XX______, _XX_____, __XX____, ________, ________, ________}};
 
 #define abs(x) ((x) > 0 ? (x) : (-(x)))
+
+typedef struct s_shtctl
+{
+    unsigned char *map; // 大小等于xsize*ysize, 用来表示每个像素属于哪个图层
+    int xsize, ysize, top;
+    SHEET *sheets[MAX_SHEETS];
+    SHEET _sheets[MAX_SHEETS];
+} SHTCTL;
+
+SHTCTL *ctl;
 
 void init_video()
 {
@@ -47,18 +49,19 @@ void init_video()
     initPalette();
     cacheFonts();
 
-    shtctl_init(scr_x, scr_y);
+    init_sheets(scr_x, scr_y);
 
     // 默认颜色背景
-    bg = sheet_alloc();
-    sheet_setbuf(bg, (u8 *)mm_alloc_4k(scr_x * scr_y), scr_x, scr_y, -1);
+    SHEET *bg = alloc_sheet();
+    sheet_setbuf(bg, (unsigned char *)mm_alloc_4k(scr_x * scr_y), scr_x, scr_y,
+                 -1);
     memset(bg->buf, PEN_BLACK, scr_x * scr_y);
-    sheet_updown(bg, 0);
+    movez(bg, 0);
 }
 
 void initPalette()
 {
-    static const u8 rgb[48] = {
+    static const unsigned char rgb[48] = {
         0x00, 0x00, 0x00, /*  0:黑 */
         0xff, 0x00, 0x00, /*  1:梁红 */
         0x00, 0xff, 0x00, /*  2:亮绿 */
@@ -79,9 +82,9 @@ void initPalette()
     setPalette(0, 15, rgb);
 }
 
-void setPalette(int start, int end, const u8 *palette)
+void setPalette(int start, int end, const unsigned char *palette)
 {
-    u32 eflags = io_load_eflags();
+    unsigned int eflags = io_load_eflags();
     io_cli();
     out8(0x03c8, start);
     for (int i = start; i <= end; i++)
@@ -96,22 +99,26 @@ void setPalette(int start, int end, const u8 *palette)
 
 void cacheFonts()
 {
-    for (u32 i = 0; i < fonts.Chars; i++)
+    for (unsigned int i = 0; i < fonts.Chars; i++)
     {
-        u16 index       = fonts.Index[i];
-        fontsmap[index] = i;
+        unsigned short index = fonts.Index[i];
+        fontsmap[index]      = i;
     }
 }
 
-void putPixelTo(u8 *dst, int pitch, int x, int y, u8 color)
+void putPixelTo(unsigned char *dst, int pitch, int x, int y, int color)
 {
-    u32 base  = y * pitch + x;
-    dst[base] = color;
+    unsigned int base = y * pitch + x;
+    dst[base]         = color;
 }
 
-void putPixel(int x, int y, u8 color)
+void putPixel(int x, int y, int color)
 {
-    u32 base = y * scr_pitch + x;
+    // 每个bank 0xa0000-0xb0000 共 0x10000 = 64K 字节
+    // 显存一共800*600共 480000 字节
+    // 8个bank
+    // bank n offset m <-> (n << 16) | m <-> 0xa0000 | m
+    unsigned int base = y * scr_pitch + x;
     if (base < bank_start || base >= bank_end)
     {
         bga_set_bank(base >> 16);
@@ -119,7 +126,8 @@ void putPixel(int x, int y, u8 color)
     vram[base & 0xffff] = color;
 }
 
-void drawLineTo(u8 *dst, int pitch, int x0, int y0, int x1, int y1, u8 color)
+void drawLineTo(unsigned char *dst, int pitch, int x0, int y0, int x1, int y1,
+                int color)
 {
     // Bresenhamline算法
     int dx  = x1 - x0;           // x偏移量
@@ -160,7 +168,7 @@ void drawLineTo(u8 *dst, int pitch, int x0, int y0, int x1, int y1, u8 color)
     }
 }
 
-void drawLine(int x0, int y0, int x1, int y1, u8 color)
+void drawLine(int x0, int y0, int x1, int y1, int color)
 {
     // Bresenhamline算法
     int dx  = x1 - x0;           // x偏移量
@@ -201,7 +209,8 @@ void drawLine(int x0, int y0, int x1, int y1, u8 color)
     }
 }
 
-void drawRectTo(u8 *dst, int pitch, int x1, int y1, int x2, int y2, u8 color)
+void drawRectTo(unsigned char *dst, int pitch, int x1, int y1, int x2, int y2,
+                int color)
 {
     for (int y = y1; y < y2; y++)
     {
@@ -215,7 +224,7 @@ void drawRectTo(u8 *dst, int pitch, int x1, int y1, int x2, int y2, u8 color)
     }
 }
 
-void drawRect(int x1, int y1, int x2, int y2, u8 color)
+void drawRect(int x1, int y1, int x2, int y2, int color)
 {
     for (int y = y1; y < y2; y++)
     {
@@ -229,7 +238,8 @@ void drawRect(int x1, int y1, int x2, int y2, u8 color)
     }
 }
 
-void fillRectTo(u8 *dst, int pitch, int x1, int y1, int x2, int y2, u8 color)
+void fillRectTo(unsigned char *dst, int pitch, int x1, int y1, int x2, int y2,
+                int color)
 {
     for (int y = y1; y < y2; y++)
     {
@@ -240,7 +250,7 @@ void fillRectTo(u8 *dst, int pitch, int x1, int y1, int x2, int y2, u8 color)
     }
 }
 
-void fillRect(int x1, int y1, int x2, int y2, u8 color)
+void fillRect(int x1, int y1, int x2, int y2, int color)
 {
     for (int y = y1; y < y2; y++)
     {
@@ -251,14 +261,15 @@ void fillRect(int x1, int y1, int x2, int y2, u8 color)
     }
 }
 
-void drawGlyphTo(u8 *dst, int pitch, int x, int y, const u8 *glyph, u8 color)
+void drawGlyphTo(unsigned char *dst, int pitch, int x, int y,
+                 const unsigned char *glyph, int color)
 {
-    u32 base = y * pitch + x;
+    unsigned int base = y * pitch + x;
     for (int in_y = 0; in_y < 16; in_y++)
     {
-        u8 line     = glyph[in_y];
-        u8 mask     = 0x80;
-        u32 in_base = base;
+        unsigned char line   = glyph[in_y];
+        unsigned char mask   = 0x80;
+        unsigned int in_base = base;
         while (mask)
         {
             if (line & mask)
@@ -272,14 +283,14 @@ void drawGlyphTo(u8 *dst, int pitch, int x, int y, const u8 *glyph, u8 color)
     }
 }
 
-void drawGlyph(int x, int y, const u8 *glyph, u8 color)
+void drawGlyph(int x, int y, const unsigned char *glyph, int color)
 {
-    u32 base = y * scr_pitch + x;
+    unsigned int base = y * scr_pitch + x;
     for (int in_y = 0; in_y < fonts.Height; in_y++)
     {
-        u8 line     = glyph[in_y];
-        u8 mask     = 0x80;
-        u32 in_base = base;
+        unsigned char line   = glyph[in_y];
+        unsigned char mask   = 0x80;
+        unsigned int in_base = base;
         while (mask)
         {
             if (line & mask)
@@ -297,19 +308,20 @@ void drawGlyph(int x, int y, const u8 *glyph, u8 color)
     }
 }
 
-void drawCharTo(u8 *dst, int pitch, int x, int y, char ch, u8 color)
+void drawCharTo(unsigned char *dst, int pitch, int x, int y, char ch, int color)
 {
-    const u8 *font_data = &fonts.Bitmap[16 * fontsmap[ch]];
+    const unsigned char *font_data = &fonts.Bitmap[16 * fontsmap[ch]];
     drawGlyphTo(dst, pitch, x, y, font_data, color);
 }
 
-void drawChar(int x, int y, char ch, u8 color)
+void drawChar(int x, int y, char ch, int color)
 {
-    const u8 *font_data = &fonts.Bitmap[16 * fontsmap[ch]];
+    const unsigned char *font_data = &fonts.Bitmap[16 * fontsmap[ch]];
     drawGlyph(x, y, font_data, color);
 }
 
-void drawTextTo(u8 *dst, int pitch, int x, int y, const char *str, u8 color)
+void drawTextTo(unsigned char *dst, int pitch, int x, int y, const char *str,
+                int color)
 {
     while (*str)
     {
@@ -318,7 +330,7 @@ void drawTextTo(u8 *dst, int pitch, int x, int y, const char *str, u8 color)
     }
 }
 
-void drawText(int x, int y, const char *str, u8 color)
+void drawText(int x, int y, const char *str, int color)
 {
     while (*str)
     {
@@ -327,13 +339,13 @@ void drawText(int x, int y, const char *str, u8 color)
     }
 }
 
-void gotoxy(u32 x, u32 y)
+void gotoxy(int x, int y)
 {
     cur_x = x;
     cur_y = y;
 }
 
-void putchar(char ch, u8 color)
+void putchar(char ch, int color)
 {
     if (ch == '\n')
     {
@@ -360,7 +372,7 @@ void putchar(char ch, u8 color)
     }
 }
 
-void printstr(const char *str, u8 color)
+void printstr(const char *str, int color)
 {
     while (*str)
     {
@@ -368,17 +380,40 @@ void printstr(const char *str, u8 color)
     }
 }
 
-int shtctl_init(int x_size, int y_size)
+void drawWindowTo(unsigned char *buf, int pitch, int xsize, int ysize,
+                  const char *title)
+{
+    drawLineTo(buf, pitch, 0, 0, xsize, 0, PEN_LIGHT_GRAY);            // top
+    drawLineTo(buf, pitch, 1, 1, xsize - 1, 1, PEN_WHITE);             // top2
+    drawLineTo(buf, pitch, 0, 0, 0, ysize, PEN_LIGHT_GRAY);            // left
+    drawLineTo(buf, pitch, 1, 1, 1, ysize - 1, PEN_WHITE);             // left2
+    drawLineTo(buf, pitch, xsize - 1, 0, xsize - 1, ysize, PEN_BLACK); // right
+    drawLineTo(buf, pitch, xsize - 2, 1, xsize - 2, ysize - 1,
+               PEN_DARK_GRAY); // right2
+    drawLineTo(buf, pitch, 0, ysize - 1, xsize, ysize - 1,
+               PEN_BLACK); // bottom
+    drawLineTo(buf, pitch, 1, ysize - 2, xsize - 1, ysize - 2,
+               PEN_DARK_GRAY); // bottom2
+    fillRectTo(buf, pitch, 2, 2, xsize - 2, ysize - 2, PEN_LIGHT_GRAY); // body
+    fillRectTo(buf, pitch, 3, 3, xsize - 3, 20, PEN_DARK_CLAN); // header
+    drawTextTo(buf, pitch, 24, 4, title, PEN_WHITE);
+
+    fillRectTo(buf, pitch, xsize - 19, 5, xsize - 5, 18, PEN_LIGHT_GRAY);
+    drawGlyphTo(buf, pitch, xsize - 20, 5, closebtn[0], PEN_BLACK);
+    drawGlyphTo(buf, pitch, xsize - 20 + 8, 5, closebtn[1], PEN_BLACK);
+}
+
+int init_sheets(int x_size, int y_size)
 {
     ctl = (SHTCTL *)mm_alloc_4k(sizeof(SHTCTL));
     if (ctl == 0)
     {
         return -1;
     }
-    ctl->map = (u8 *)mm_alloc_4k(x_size * y_size);
+    ctl->map = (unsigned char *)mm_alloc_4k(x_size * y_size);
     if (ctl->map == 0)
     {
-        mm_free_4k(ctl, sizeof(MEMMAN));
+        mm_free_4k((unsigned int)ctl, sizeof(MEMMAN));
         return -1;
     }
     ctl->xsize = x_size;
@@ -391,7 +426,7 @@ int shtctl_init(int x_size, int y_size)
     return 0;
 }
 
-SHEET *sheet_alloc()
+SHEET *alloc_sheet()
 {
     for (int i = 0; i < MAX_SHEETS; i++)
     {
@@ -406,7 +441,17 @@ SHEET *sheet_alloc()
     return 0; /* 所有的SHEET都处于正在使用状态*/
 }
 
-void sheet_setbuf(SHEET *sht, u8 *buf, int xsize, int ysize, int col_inv)
+void free_sheet(SHEET *sht)
+{
+    if (sht->height >= 0)
+    {
+        movez(sht, -1); /* 如果处于显示状态，则先设定为隐藏 */
+    }
+    sht->flags = 0; /* "未使用"标志 */
+}
+
+void sheet_setbuf(SHEET *sht, unsigned char *buf, int xsize, int ysize,
+                  int col_inv)
 {
     sht->buf     = buf;
     sht->bxsize  = xsize;
@@ -414,13 +459,13 @@ void sheet_setbuf(SHEET *sht, u8 *buf, int xsize, int ysize, int col_inv)
     sht->col_inv = col_inv;
 }
 
-void sheet_updown(SHEET *sht, int height)
+void movez(SHEET *sht, int height)
 {
     int old = sht->height;
     // 边界处理
     if (height > ctl->top + 1) height = ctl->top + 1;
-    if (height < -1) height = -1;
-    sht->height = height; // 设定高度
+    if (height < -1) height = -1; // -1隐藏
+    sht->height = height;         // 设定高度
 
     /* 下面主要是进行sheets[ ]的重新排列 */
     if (old > height)
@@ -448,9 +493,11 @@ void sheet_updown(SHEET *sht, int height)
             }
             ctl->top--; /* 由于显示中的图层减少了一个，所以最上面的图层高度下降 */
         }
-        sheet_refresh(sht->vx0, sht->vy0, sht->vx0 + sht->bxsize,
-                      sht->vy0 + sht->bysize, height,
-                      height); /* 按新图层的信息重新绘制画面 */
+        /* 按新图层的信息重新绘制画面 */
+        refresh_map(sht->vx0, sht->vy0, sht->vx0 + sht->bxsize,
+                    sht->vy0 + sht->bysize, height);
+        refresh(sht->vx0, sht->vy0, sht->vx0 + sht->bxsize,
+                sht->vy0 + sht->bysize, height, height);
     }
     else if (old < height)
     { /* 比以前高 */
@@ -475,24 +522,67 @@ void sheet_updown(SHEET *sht, int height)
             ctl->sheets[height] = sht;
             ctl->top++; /* 由于已显示的图层增加了1个，所以最上面的图层高度增加 */
         }
-        sheet_refresh(sht->vx0, sht->vy0, sht->vx0 + sht->bxsize,
-                      sht->vy0 + sht->bysize, height,
-                      height); /* 按新图层信息重新绘制画面 */
+        /* 按新图层信息重新绘制画面 */
+        refresh_map(sht->vx0, sht->vy0, sht->vx0 + sht->bxsize,
+                    sht->vy0 + sht->bysize, height);
+        refresh(sht->vx0, sht->vy0, sht->vx0 + sht->bxsize,
+                sht->vy0 + sht->bysize, height, height);
     }
 }
 
-void sheet_refresh_sheet(SHEET *sht, int bx0, int by0, int bx1, int by1)
+void refresh_local(SHEET *sht, int bx0, int by0, int bx1, int by1)
 {
     if (sht->height >= 0)
     { /* 如果正在显示，则按新图层的信息刷新画面*/
-        sheet_refresh(sht->vx0 + bx0, sht->vy0 + by0, sht->vx0 + bx1,
-                      sht->vy0 + by1, sht->height, sht->height);
+        refresh(sht->vx0 + bx0, sht->vy0 + by0, sht->vx0 + bx1, sht->vy0 + by1,
+                sht->height, sht->height);
     }
 }
 
-void sheet_refresh(int vx0, int vy0, int vx1, int vy1, int h0, int h1)
+void refresh_map(int vx0, int vy0, int vx1, int vy1, int h0)
 {
+    /* 如果refresh的范围超出了画面则修正 */
+    if (vx0 < 0) vx0 = 0;
+    if (vy0 < 0) vy0 = 0;
+    if (vx1 > ctl->xsize) vx1 = ctl->xsize;
+    if (vy1 > ctl->ysize) vy1 = ctl->ysize;
 
+    for (int h = h0; h <= ctl->top; h++)
+    {
+        SHEET *sht         = ctl->sheets[h];
+        int sid            = (int)(sht - ctl->_sheets);
+        unsigned char *buf = sht->buf;
+        unsigned char *map = ctl->map;
+
+        /* 计算相对clipbox */
+        int bx0 = vx0 - sht->vx0;
+        int bx1 = vx1 - sht->vx0;
+        int by0 = vy0 - sht->vy0;
+        int by1 = vy1 - sht->vy0;
+        if (bx0 < 0) bx0 = 0;
+        if (by0 < 0) by0 = 0;
+        if (bx1 > sht->bxsize) bx1 = sht->bxsize;
+        if (by1 > sht->bysize) by1 = sht->bysize;
+
+        for (int by = by0; by < by1; by++)
+        {
+            int vy = sht->vy0 + by;
+            for (int bx = bx0; bx < bx1; bx++)
+            {
+                int vx              = sht->vx0 + bx;
+                unsigned char color = buf[by * sht->bxsize + bx];
+                int voffset         = vy * ctl->xsize + vx;
+                if (color != sht->col_inv)
+                {
+                    map[voffset] = sid;
+                }
+            }
+        }
+    }
+}
+
+void refresh(int vx0, int vy0, int vx1, int vy1, int h0, int h1)
+{
     /* 如果refresh的范围超出了画面则修正 */
     if (vx0 < 0) vx0 = 0;
     if (vy0 < 0) vy0 = 0;
@@ -502,10 +592,10 @@ void sheet_refresh(int vx0, int vy0, int vx1, int vy1, int h0, int h1)
 
     for (int h = h0; h <= h1; h++)
     {
-        SHEET *sht = ctl->sheets[h];
-        int sid    = (int)(sht - ctl->_sheets);
-        u8 *buf    = sht->buf;
-        int *map   = ctl->map;
+        SHEET *sht         = ctl->sheets[h];
+        int sid            = (int)(sht - ctl->_sheets);
+        unsigned char *buf = sht->buf;
+        unsigned char *map = ctl->map;
 
         /* 计算相对clipbox */
         int bx0 = vx0 - sht->vx0;
@@ -523,14 +613,10 @@ void sheet_refresh(int vx0, int vy0, int vx1, int vy1, int h0, int h1)
             for (int bx = bx0; bx < bx1; bx++)
             {
                 int vx      = sht->vx0 + bx;
-                u8 color    = buf[by * sht->bxsize + bx];
                 int voffset = vy * ctl->xsize + vx;
-                if (color != sht->col_inv)
-                {
-                    map[voffset] = sid;
-                }
                 if (map[voffset] == sid)
                 {
+                    unsigned char color = buf[by * sht->bxsize + bx];
                     putPixel(vx, vy, color);
                 }
             }
@@ -538,47 +624,19 @@ void sheet_refresh(int vx0, int vy0, int vx1, int vy1, int h0, int h1)
     }
 }
 
-void sheet_slide(SHEET *sht, int vx0, int vy0)
+void movexy(SHEET *sht, int vx0, int vy0)
 {
     int old_vx0 = sht->vx0, old_vy0 = sht->vy0;
     sht->vx0 = vx0;
     sht->vy0 = vy0;
     if (sht->height >= 0)
     { /* 如果正在显示，则按新图层的信息刷新画面 */
-        sheet_refresh(old_vx0, old_vy0, old_vx0 + sht->bxsize,
-                      old_vy0 + sht->bysize, 0, sht->height - 1);
-        sheet_refresh(vx0, vy0, vx0 + sht->bxsize, vy0 + sht->bysize,
-                      sht->height, sht->height);
+        refresh_map(old_vx0, old_vy0, old_vx0 + sht->bxsize,
+                    old_vy0 + sht->bysize, 0);
+        refresh_map(vx0, vy0, vx0 + sht->bxsize, vy0 + sht->bysize, sht->height);
+        refresh(old_vx0, old_vy0, old_vx0 + sht->bxsize, old_vy0 + sht->bysize,
+                0, sht->height - 1);
+        refresh(vx0, vy0, vx0 + sht->bxsize, vy0 + sht->bysize, sht->height,
+                sht->height);
     }
-}
-
-void sheet_free(SHEET *sht)
-{
-    if (sht->height >= 0)
-    {
-        sheet_updown(sht, -1); /* 如果处于显示状态，则先设定为隐藏 */
-    }
-    sht->flags = 0; /* "未使用"标志 */
-}
-
-void drawWindowTo(u8 *buf, int pitch, int xsize, int ysize, char *title)
-{
-    drawLineTo(buf, pitch, 0, 0, xsize, 0, PEN_LIGHT_GRAY);            // top
-    drawLineTo(buf, pitch, 1, 1, xsize - 1, 1, PEN_WHITE);             // top2
-    drawLineTo(buf, pitch, 0, 0, 0, ysize, PEN_LIGHT_GRAY);            // left
-    drawLineTo(buf, pitch, 1, 1, 1, ysize - 1, PEN_WHITE);             // left2
-    drawLineTo(buf, pitch, xsize - 1, 0, xsize - 1, ysize, PEN_BLACK); // right
-    drawLineTo(buf, pitch, xsize - 2, 1, xsize - 2, ysize - 1,
-               PEN_DARK_GRAY); // right2
-    drawLineTo(buf, pitch, 0, ysize - 1, xsize, ysize - 1,
-               PEN_BLACK); // bottom
-    drawLineTo(buf, pitch, 1, ysize - 2, xsize - 1, ysize - 2,
-               PEN_DARK_GRAY); // bottom2
-    fillRectTo(buf, pitch, 2, 2, xsize - 2, ysize - 2, PEN_LIGHT_GRAY); // body
-    fillRectTo(buf, pitch, 3, 3, xsize - 3, 20, PEN_DARK_CLAN); // header
-    drawTextTo(buf, pitch, 24, 4, title, PEN_WHITE);
-
-    fillRectTo(buf, pitch, xsize - 19, 5, xsize - 5, 18, PEN_LIGHT_GRAY);
-    drawGlyphTo(buf, pitch, xsize - 20, 5, closebtn[0], PEN_BLACK);
-    drawGlyphTo(buf, pitch, xsize - 20 + 8, 5, closebtn[1], PEN_BLACK);
 }

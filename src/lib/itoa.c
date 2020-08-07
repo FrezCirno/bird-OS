@@ -1,28 +1,4 @@
-#include <types.h>
 
-void memcpy(void *dst, const void *src, s32 size)
-{
-    for (int i = 0; i < size; i++)
-    {
-        *(u8 *)dst++ = *(u8 *)src++;
-    }
-}
-
-void memset(void *buf, u8 val, u32 size)
-{
-    while (size--)
-    {
-        *(u8 *)buf++ = val;
-    }
-}
-
-void strcpy(u8 *dst, const u8 *src)
-{
-    while (*src)
-    {
-        *dst++ = *src++;
-    }
-}
 
 const char *itoa(int x, int radix)
 {

@@ -5,9 +5,9 @@ DASM = ndisasm
 CC   = gcc
 LD   = ld
 
-CFLAGS = -m32 -fno-builtin -fno-stack-protector -nostdlib -nostdinc -Iinclude -c -g
+CFLAGS = -m32 -fno-builtin -nostdlib -nostdinc -Iinclude -c -g
 
-default: clean all
+default: all
 
 # rules
 
@@ -47,6 +47,9 @@ lib/io.o: lib/io.asm
 lib/syscall.o: lib/syscall.asm
 	$(ASM) -f elf -o $@ $<
 
+lib/string.o: lib/string.asm
+	$(ASM) -f elf -o $@ $<
+
 mm/memtest_sub.o: mm/memtest_sub.asm
 	$(ASM) -f elf -o $@ $<
 
@@ -54,8 +57,9 @@ kernel.o : init/_start.o init/main.o \
 		int/int_entry.o int/int_ctl.o int/exceptionh.o int/irqh.o int/syscallh.o \
 		kernel/protect.o kernel/panic.o kernel/restart.o kernel/sched.o \
 		kernel/clock.o kernel/keyboard.o kernel/mouse.o \
-		lib/glib.o lib/io.o lib/string.o lib/syscall.o lib/u_vga16.o lib/BGA.o lib/buffer.o \
-		mm/memory.o mm/memtest.o mm/memtest_sub.o 
+		lib/gui.o lib/glib.o \
+		lib/io.o lib/string.o lib/itoa.o lib/u_vga16.o lib/BGA.o lib/buffer.o \
+		mm/memory.o 
 	$(LD) -m elf_i386 -Ttext 0x100000 -o $@ $^
 
 
@@ -96,6 +100,6 @@ qemu:
 	#   -drive format=raw,media=cdrom,file=build.img   \
 	#   -serial stdio                                  \
 	#   -usb                                          
-	gdb kernel.o
+	gdb
 
 rebuild: clean build

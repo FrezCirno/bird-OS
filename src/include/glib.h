@@ -1,5 +1,4 @@
 #pragma once
-#include <types.h>
 #include <font.h>
 #include <BGA.h>
 
@@ -8,7 +7,7 @@
 
 typedef struct s_sheet
 {
-    u8 *buf;
+    unsigned char *buf;
     int bxsize, bysize; // 图层大小
     int vx0, vy0;       // 图层位置
     int col_inv;        // 透明色色号
@@ -16,17 +15,9 @@ typedef struct s_sheet
     int flags;          // 图层设定
 } SHEET;
 
-typedef struct s_shtctl
-{
-    int *map; // 大小等于xsize*ysize, 用来表示每个像素属于哪个图层
-    int xsize, ysize, top;
-    SHEET *sheets[MAX_SHEETS];
-    SHEET _sheets[MAX_SHEETS];
-} SHTCTL;
-
-extern u32 scr_x;
-extern u32 scr_y;
-extern u32 scr_bpp;
+extern int scr_x;
+extern int scr_y;
+extern int scr_bpp;
 
 #define PEN_BLACK        0  //黑
 #define PEN_RED          1  //梁红
@@ -45,7 +36,7 @@ extern u32 scr_bpp;
 #define PEN_DARK_BLUE    14 //浅暗蓝
 #define PEN_DARK_GRAY    15 //暗灰
 
-extern const u8 cursor[16];
+extern const unsigned char cursor[16];
 
 void initPalette();
 
@@ -53,65 +44,75 @@ void cacheFonts();
 
 void init_video();
 
-void setPalette(int start, int end, const u8 *palette);
+void setPalette(int start, int end, const unsigned char *palette);
 
-void putPixelTo(u8 *dst, int pitch, int x, int y, u8 color);
+void putPixelTo(unsigned char *dst, int pitch, int x, int y, int color);
 
-void putPixel(int x, int y, u8 color);
+void putPixel(int x, int y, int color);
 
-void drawRectTo(u8 *dst, int pitch, int x1, int y1, int x2, int y2, u8 color);
+void drawRectTo(unsigned char *dst, int pitch, int x1, int y1, int x2, int y2,
+                int color);
 
-void drawRect(int x1, int y1, int x2, int y2, u8 color);
+void drawRect(int x1, int y1, int x2, int y2, int color);
 
-void fillRectTo(u8 *dst, int pitch, int x1, int y1, int x2, int y2, u8 color);
+void fillRectTo(unsigned char *dst, int pitch, int x1, int y1, int x2, int y2,
+                int color);
 
-void fillRect(int x1, int y1, int x2, int y2, u8 color);
+void fillRect(int x1, int y1, int x2, int y2, int color);
 
-void drawLineTo(u8 *dst, int pitch, int x0, int y0, int x1, int y1, u8 color);
+void drawLineTo(unsigned char *dst, int pitch, int x0, int y0, int x1, int y1,
+                int color);
 
-void drawLine(int x0, int y0, int x1, int y1, u8 color);
+void drawLine(int x0, int y0, int x1, int y1, int color);
 
-void drawGlyphTo(u8 *dst, int pitch, int x, int y, const u8 *glyph, u8 color);
+void drawGlyphTo(unsigned char *dst, int pitch, int x, int y,
+                 const unsigned char *glyph, int color);
 
-void drawGlyph(int x, int y, const u8 *glyph, u8 color);
+void drawGlyph(int x, int y, const unsigned char *glyph, int color);
 
-void drawCharTo(u8 *dst, int pitch, int x, int y, char ch, u8 color);
+void drawCharTo(unsigned char *dst, int pitch, int x, int y, char ch, int color);
 
-void drawChar(int x, int y, char ch, u8 color);
+void drawChar(int x, int y, char ch, int color);
 
-void drawTextTo(u8 *dst, int pitch, int x, int y, const char *str, u8 color);
+void drawTextTo(unsigned char *dst, int pitch, int x, int y, const char *str,
+                int color);
 
-void drawText(int x, int y, const char *str, u8 color);
+void drawText(int x, int y, const char *str, int color);
 
 // 依次输出
-void gotoxy(u32 x, u32 y);
+void gotoxy(int x, int y);
 
-void putchar(char ch, u8 color);
+void putchar(char ch, int color);
 
-void printstr(const char *str, u8 color);
+void printstr(const char *str, int color);
 
 // 图层控制, 在init_video中调用
-int shtctl_init(int x_size, int y_size);
+int init_sheets(int x_size, int y_size);
 
 // 分配新的图层
-SHEET *sheet_alloc();
+SHEET *alloc_sheet();
 
 // 设定图层信息, height==-1表示隐藏
-void sheet_setbuf(SHEET *sht, u8 *buf, int xsize, int ysize, int col_inv);
+void sheet_setbuf(SHEET *sht, unsigned char *buf, int xsize, int ysize,
+                  int col_inv);
 
 // 图层水平移动
-void sheet_slide(SHEET *sht, int vx0, int vy0);
+void movexy(SHEET *sht, int vx0, int vy0);
 
 // 设置图层高度
-void sheet_updown(SHEET *sht, int height);
+void movez(SHEET *sht, int height);
 
 // 刷新图层sht内部clipbox的屏幕区域
-void sheet_refresh_sheet(SHEET *sht, int bx0, int by0, int bx1, int by1);
+void refresh_local(SHEET *sht, int bx0, int by0, int bx1, int by1);
+
+// 预刷新
+void refresh_map(int vx0, int vy0, int vx1, int vy1, int h0);
 
 // 刷新屏幕clipbox区域的所有图层
-void sheet_refresh(int vx0, int vy0, int vx1, int vy1, int h0, int h1);
+void refresh(int vx0, int vy0, int vx1, int vy1, int h0, int h1);
 
 // 释放图层
-void sheet_free(SHEET *sht);
+void free_sheet(SHEET *sht);
 
-void drawWindowTo(u8 *buf, int pitch, int xsize, int ysize, char *title);
+void drawWindowTo(unsigned char *buf, int pitch, int xsize, int ysize,
+                  const char *title);

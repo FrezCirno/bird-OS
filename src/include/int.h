@@ -1,5 +1,4 @@
 #pragma once
-#include <types.h>
 
 /* 中断向量表 */
 // 硬件异常
@@ -40,20 +39,24 @@
 #define NR_IRQ      16
 #define NR_SYS_CALL 10
 
+typedef void (*int_handler)();
+typedef void (*irq_handler)(unsigned int);
+
 extern irq_handler irq_table[NR_IRQ];
 extern void *syscall_table[NR_SYS_CALL];
 
 // int_ctl.c
-void disable_irq(u32 irq);
-void enable_irq(u32 irq);
+void disable_irq(unsigned int irq);
+void enable_irq(unsigned int irq);
 
 // exceptionh.c
-void exception_handler(u32 vec_no, u32 err_code, u32 eip, u32 cs, u32 eflags);
+void exception_handler(unsigned int vec_no, unsigned int err_code,
+                       unsigned int eip, unsigned int cs, unsigned int eflags);
 
 // irqh.c
-void default_irq_handler(u32 irq);
-void put_irq_handler(u32 irq, int_handler handler);
+void default_irq_handler(unsigned int irq);
+void put_irq_handler(unsigned int irq, irq_handler handler);
 
 // syscallh.c
-int sys_get_ticks();
+int sys_getticks();
 int sys_nothing();

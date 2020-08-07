@@ -107,6 +107,8 @@ or in the list below */
 #define PAD_MID      PAD_5             /* Middle key	*/
 #define PAD_DEL      PAD_DOT           /* Del		*/
 
+extern const unsigned int keymap[NR_SCAN_CODES][MAP_COLS];
+
 /* AT keyboard */
 /* 8042 ports */
 #define KB_DATA 0x60
@@ -119,5 +121,5 @@ or in the list below */
     Write: Write Input Buffer(8042 Command) */
 
 void init_keyboard();
-void keyboard_handler(u32 irq);
+void keyboard_handler(unsigned int irq);
 void keyboard_read();

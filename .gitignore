@@ -4,3 +4,4 @@ tools
 *.o
 *.bin
 *.img
+src/build.img

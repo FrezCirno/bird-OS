@@ -1,10 +1,10 @@
-#include <types.h>
 #include <int.h>
 #include <glib.h>   //
 #include <string.h> // itoa
 
 // 异常处理函数 // 0x1009a4
-void exception_handler(u32 vec_no, u32 err_code, u32 eip, u32 cs, u32 eflags)
+void exception_handler(unsigned int vec_no, unsigned int err_code,
+                       unsigned int eip, unsigned int cs, unsigned int eflags)
 {
     static const char *err_msg[] = {
         "#DE Divide Error",

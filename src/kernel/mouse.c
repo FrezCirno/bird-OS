@@ -1,4 +1,5 @@
-#include <io.h>
+#include <asm/io.h>
+#include <bird/memory.h>
 #include <int.h>
 #include <buffer.h>
 #include <glib.h>
@@ -7,13 +8,12 @@
 
 #define MOUSE_BUF_SIZE 128
 
-u8 mouse_buf[MOUSE_BUF_SIZE];
+unsigned char mouse_buf[MOUSE_BUF_SIZE];
 FIFO_BUFFER mouse_in;
 
 int mouse_x, mouse_y;
 MOUSE_DEC mdec;
 SHEET *mouse_sht;
-u8 mouse_sht_buf[8 * 16];
 
 void wait_KBC_sendready()
 {
@@ -41,25 +41,24 @@ void init_mouse()
     mdec.phase = 0;
     fifo_init(&mouse_in, MOUSE_BUF_SIZE, mouse_buf);
 
-    mouse_sht = sheet_alloc();
-    sheet_setbuf(mouse_sht, mouse_sht_buf, 8, 16, 255); /* 透明色号255 */
-    fillRectTo(mouse_sht_buf, 8, 0, 0, 8, 16, 255);
-    drawGlyphTo(mouse_sht_buf, 8, 0, 0, cursor, PEN_WHITE);
-
-    sheet_slide(mouse_sht, mouse_x, mouse_y);
-
-    sheet_updown(mouse_sht, 2);
+    mouse_sht = alloc_sheet();
+    sheet_setbuf(mouse_sht, (unsigned char *)mm_alloc(8 * 16), 8, 16,
+                 255); /* 透明色号255 */
+    fillRectTo(mouse_sht->buf, 8, 0, 0, 8, 16, 255);
+    drawGlyphTo(mouse_sht->buf, 8, 0, 0, cursor, PEN_WHITE);
+    movexy(mouse_sht, mouse_x, mouse_y);
+    movez(mouse_sht, 2);
 
     put_irq_handler(INT_VECTOR_IRQ_MOUSE, mouse_handler);
     enable_irq(INT_VECTOR_IRQ_MOUSE);
 }
 
-void mouse_handler(u32 irq)
+void mouse_handler(unsigned int irq)
 {
     fifo_push(&mouse_in, in8(MOUSE_PORT_DATA));
 }
 
-int mouse_decode(u8 dat)
+int mouse_decode(unsigned char dat)
 {
     switch (mdec.phase)
     {
@@ -122,7 +121,7 @@ void mouse_read()
             if (mouse_y < 0) mouse_y = 0;
             if (mouse_x >= scr_x) mouse_x = scr_x - 1;
             if (mouse_y >= scr_y) mouse_y = scr_y - 1;
-            sheet_slide(mouse_sht, mouse_x, mouse_y);
+            movexy(mouse_sht, mouse_x, mouse_y);
         }
     }
 }

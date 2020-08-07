@@ -40,7 +40,6 @@ global   hwint12
 global   hwint13
 global   hwint14
 global   hwint15
-; 系统调用, 由用户程序调用
 global   syscall_entry
 
 %include "int_const.inc"

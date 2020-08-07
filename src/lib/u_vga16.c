@@ -4,7 +4,7 @@
 #include "font.h"
 
 /// character bitmap for each encoding
-static const u8 __font_bitmap__[] = {
+static const unsigned char __font_bitmap__[] = {
     //   0 $00 'char0'
     //	width 8, bbx 0, bby -4, bbw 8, bbh 16
     ________,
@@ -52190,7 +52190,7 @@ static const u8 __font_bitmap__[] = {
 };
 
 /// character width for each encoding
-static const u8 __font_widths__[] = {
+static const unsigned char __font_widths__[] = {
     8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8,
     8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8,
     8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8,
@@ -52310,7 +52310,7 @@ static const u8 __font_widths__[] = {
 };
 
 /// character encoding for each index entry
-static const u16 __font_index__[] = {
+static const unsigned short __font_index__[] = {
     0,     32,    33,    34,    35,    36,    37,    38,    39,    40,    41,
     42,    43,    44,    45,    46,    47,    48,    49,    50,    51,    52,
     53,    54,    55,    56,    57,    58,    59,    60,    61,    62,    63,

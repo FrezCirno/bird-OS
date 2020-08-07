@@ -1,32 +1,30 @@
 #pragma once
 #pragma pack(1) // 防止结构体自动按n字节对齐, 否则描述符指针结构体会出问题
 
-#include <types.h>
-
 /* 段描述符, 放在GDT和LDT里 */
 /* 或者TSS描述符, 放在GDT里 */
 typedef struct s_descriptor /* 共 8 个字节 */
 {
-    u16 limit_low;       /* Limit */
-    u16 base_low;        /* Base */
-    u8 base_mid;         /* Base */
-    u8 attr1;            /* P(1) DPL(2) DT(1) TYPE(4) */
-    u8 limit_high_attr2; /* G(1) D(1) 0(1) AVL(1) LimitHigh(4) */
-    u8 base_high;        /* Base */
+    unsigned short limit_low;       /* Limit */
+    unsigned short base_low;        /* Base */
+    unsigned char base_mid;         /* Base */
+    unsigned char attr1;            /* P(1) DPL(2) DT(1) TYPE(4) */
+    unsigned char limit_high_attr2; /* G(1) D(1) 0(1) AVL(1) LimitHigh(4) */
+    unsigned char base_high;        /* Base */
 } DESCRIPTOR;
 
 /* 门描述符, 放在IDT里 */
 typedef struct s_gate
 {
-    u16 offset_low; /* Offset Low */
-    u16 selector;   /* Selector */
-    u8 dcount; /* 该字段只在调用门描述符中有效。如果在利用
+    unsigned short offset_low; /* Offset Low */
+    unsigned short selector;   /* Selector */
+    unsigned char dcount; /* 该字段只在调用门描述符中有效。如果在利用
               调用门调用子程序时引起特权级的转换和堆栈
               的改变，需要将外层堆栈中的参数复制到内层
               堆栈。该双字计数字段就是用于说明这种情况
               发生时，要复制的双字参数的数量。*/
-    u8 attr;   /* P(1) DPL(2) DT(1,=0) TYPE(4) */
-    u16 offset_high; /* Offset High */
+    unsigned char attr;         /* P(1) DPL(2) DT(1,=0) TYPE(4) */
+    unsigned short offset_high; /* Offset High */
 } GATE;
 
 /* 描述符和门的公共属性 */
@@ -70,46 +68,46 @@ typedef struct s_gate
 
 typedef struct s_tss
 {
-    u16 prev, _0;
-    u32 esp0;    /* stack pointer to use during interrupt */
-    u16 ss0, _1; /*   "   segment  "  "    "        "     */
-    u32 esp1;
-    u16 ss1, _2;
-    u32 esp2;
-    u16 ss2, _3;
-    u32 cr3;
-    u32 eip;
-    u32 flags;
-    u32 eax;
-    u32 ecx;
-    u32 edx;
-    u32 ebx;
-    u32 esp;
-    u32 ebp;
-    u32 esi;
-    u32 edi;
-    u16 es, _4;
-    u16 cs, _5;
-    u16 ss, _6;
-    u16 ds, _7;
-    u16 fs, _8;
-    u16 gs, _9;
-    u16 ldt, _a;
-    u16 trap, iobase;
+    unsigned short prev, _0;
+    unsigned int esp0;      /* stack pointer to use during interrupt */
+    unsigned short ss0, _1; /*   "   segment  "  "    "        "     */
+    unsigned int esp1;
+    unsigned short ss1, _2;
+    unsigned int esp2;
+    unsigned short ss2, _3;
+    unsigned int cr3;
+    unsigned int eip;
+    unsigned int flags;
+    unsigned int eax;
+    unsigned int ecx;
+    unsigned int edx;
+    unsigned int ebx;
+    unsigned int esp;
+    unsigned int ebp;
+    unsigned int esi;
+    unsigned int edi;
+    unsigned short es, _4;
+    unsigned short cs, _5;
+    unsigned short ss, _6;
+    unsigned short ds, _7;
+    unsigned short fs, _8;
+    unsigned short gs, _9;
+    unsigned short ldt, _a;
+    unsigned short trap, iobase;
     /* I/O位图基址大于或等于TSS段界限，就表示没有I/O许可位图 */
 } TSS;
 
 /* 描述符表指针, lgdt, lidt指令参数 */
 typedef struct s_ptr
 {
-    u16 limit;
-    u32 base;
+    unsigned short limit;
+    unsigned int base;
 } GIDTPTR;
 
 /* 16位, 段选择子, call, jmp指令参数 */
 // 一定是8的倍数, 所以低3位用不到
 // 低3位用于描述其他内容
-typedef u16 SELECTOR;
+typedef unsigned short SELECTOR;
 
 // 选择子属性
 #define SA_TI   0x4 // 1表示使用LDT, 0表示使用GDT
@@ -159,10 +157,12 @@ extern GIDTPTR idt_ptr; // 0~15:Limit  16~47:Base
 
 extern TSS tss;
 
-void set_desc(DESCRIPTOR *pDesc, u32 base, u32 limit, u16 attribute);
+void set_seg_desc(DESCRIPTOR *pDesc, unsigned int base, unsigned int limit,
+              unsigned short attribute);
 
 // 段基地址(绝对) + 虚拟地址 -> 物理地址
-#define vir2phys(seg_base, vir) (u32)((u32)(seg_base) + (u32)(vir))
+#define vir2phys(seg_base, vir) \
+    (unsigned int)((unsigned int)(seg_base) + (unsigned int)(vir))
 
 // gdt的选择子 -> 该段的基地址
-u32 seg2phys(u16 seg);
+unsigned int seg2phys(unsigned short seg);

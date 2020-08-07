@@ -1,9 +1,8 @@
-#include <types.h>   // u8
-#include <io.h>      // out8
-#include <string.h>  // memcpy
-#include <protect.h> // GATE, idt, gdt, tss
-#include <int.h>     // INT_VECTOR_*
-#include <proc.h>    // PROCESS
+#include <asm/io.h>    // out8
+#include <string.h>    // memcpy
+#include <protect.h>   // GATE, idt, gdt, tss
+#include <int.h>       // INT_VECTOR_*
+#include <bird/proc.h> // PROCESS
 
 /* 8259A interrupt controller ports. */
 #define INT_PORT_MASTER_CMD  0x20
@@ -56,18 +55,19 @@ void init_gdt_idt()
 
     /* gdt_ptr[6] 共 6 个字节：0~15:Limit  16~47:Base。用作 sgdt/lgdt 的参数。*/
     gdt_ptr.limit = GDT_SIZE * sizeof(DESCRIPTOR) - 1;
-    gdt_ptr.base  = (u32)&gdt;
+    gdt_ptr.base  = (unsigned int)&gdt;
 
     /* idt_ptr[6] 共 6 个字节：0~15:Limit  16~47:Base。用作 sidt/lidt 的参数。*/
     idt_ptr.limit = IDT_SIZE * sizeof(GATE) - 1;
-    idt_ptr.base  = (u32)&idt;
+    idt_ptr.base  = (unsigned int)&idt;
 }
 
 // 初始化 386 中断门
-void init_igate(u8 vector, u8 desc_type, int_handler handler, u8 privilege)
+void init_igate(unsigned char vector, unsigned char desc_type,
+                int_handler handler, unsigned char privilege)
 {
     GATE *pGate        = &idt[vector];
-    u32 base           = (u32)handler;
+    unsigned int base  = (unsigned int)handler;
     pGate->offset_low  = base & 0xFFFF;
     pGate->selector    = SELECTOR_KERNEL_CS;
     pGate->dcount      = 0;
@@ -142,19 +142,19 @@ void setup_idt()
 
 // 初始化 GDT 中的 LDT 描述符, 有几个任务就需要几个 LDT 描述符
 // LDT 描述符从SELECTOR_LDT_FIRST开始
-void init_proc_ldts()
-{
-    PROCESS *pProc   = proc_table;
-    SELECTOR ldt_slt = SELECTOR_LDT_FIRST;
-    for (int i = 0; i < NR_TASKS; i++)
-    {
-        set_desc(&gdt[INDEX_LDT_FIRST],
-                 vir2phys(seg2phys(SELECTOR_KERNEL_DS), pProc->ldt),
-                 LDT_SIZE * sizeof(DESCRIPTOR) - 1, DA_P | DA_LDT);
-        pProc++;
-        ldt_slt += 0x8;
-    }
-}
+// void init_proc_ldts()
+// {
+//     PROCESS *pProc   = proc_table;
+//     SELECTOR ldt_slt = SELECTOR_LDT_FIRST;
+//     for (int i = 0; i < NR_TASKS; i++)
+//     {
+//         set_seg_desc(&gdt[INDEX_LDT_FIRST],
+//                  vir2phys(seg2phys(SELECTOR_KERNEL_DS), pProc->ldt),
+//                  LDT_SIZE * sizeof(DESCRIPTOR) - 1, DA_P | DA_LDT);
+//         pProc++;
+//         ldt_slt += 0x8;
+//     }
+// }
 
 // 初始化 GDT 中的 TSS 描述符和 TSS
 void init_tss()
@@ -162,6 +162,6 @@ void init_tss()
     memset(&tss, 0, sizeof(tss));
     tss.ss0    = SELECTOR_KERNEL_DS;
     tss.iobase = sizeof(tss); /* 没有I/O许可位图 */
-    set_desc(&gdt[INDEX_TSS], vir2phys(seg2phys(SELECTOR_KERNEL_DS), &tss),
-             sizeof(tss) - 1, DA_P | DA_386TSS);
+    set_seg_desc(&gdt[INDEX_TSS], vir2phys(seg2phys(SELECTOR_KERNEL_DS), &tss),
+                 sizeof(tss) - 1, DA_P | DA_386TSS);
 }
