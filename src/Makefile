@@ -47,18 +47,18 @@ lib/io.o: lib/io.asm
 lib/syscall.o: lib/syscall.asm
 	$(ASM) -f elf -o $@ $<
 
-lib/string.o: lib/string.asm
-	$(ASM) -f elf -o $@ $<
-
 mm/memtest_sub.o: mm/memtest_sub.asm
 	$(ASM) -f elf -o $@ $<
 
 kernel.o : init/_start.o init/main.o \
-		int/int_entry.o int/int_ctl.o int/exceptionh.o int/irqh.o int/syscallh.o \
-		kernel/protect.o kernel/panic.o kernel/restart.o kernel/sched.o \
+		int/int_entry.o int/irqh.o \
+		kernel/protect.o kernel/proc.o kernel/sched.o \
+		kernel/traps.o kernel/syscall.o \
 		kernel/clock.o kernel/keyboard.o kernel/mouse.o \
-		lib/gui.o lib/glib.o \
-		lib/io.o lib/string.o lib/itoa.o lib/u_vga16.o lib/BGA.o lib/buffer.o \
+		kernel/drv/hd.o kernel/drv/ata.o \
+		kernel/errno.o kernel/panic.o kernel/assert.o \
+		lib/glib.o lib/ctype.o \
+		lib/itoa.o lib/u_vga16.o lib/BGA.o lib/buffer.o \
 		mm/memory.o 
 	$(LD) -m elf_i386 -Ttext 0x100000 -o $@ $^
 
@@ -84,7 +84,7 @@ dump: build
 
 clean :
 	-rm -f *.o boot/*.bin init/*.o int/*.o kernel/*.o lib/*.o mm/*.o
-	-rm -f *.img
+	-rm -f build.img
 
 qemu:
 	qemu-system-i386                                 \
@@ -93,11 +93,11 @@ qemu:
 	  -m 512                                         \
 	  -no-reboot                                     \
 	  -fda build.img                                 \
-	  -gdb tcp::1234								 \
-	  -S              								 \
+      -drive format=raw,file=80m.img                 \
+	  -gdb tcp::1234                                 \
+	  -S                                             \
 	  -smp 1                                         \
 	  -vga std &
-	#   -drive format=raw,media=cdrom,file=build.img   \
 	#   -serial stdio                                  \
 	#   -usb                                          
 	gdb

@@ -1,12 +1,10 @@
-#include <protect.h> // DESCRIPTOR, GATE, TSS
+#include <bird/protect.h> // DESCRIPTOR, GATE, TSS
 
 DESCRIPTOR gdt[GDT_SIZE];
 GIDTPTR gdt_ptr; // 0~15:Limit  16~47:Base
 
 GATE idt[IDT_SIZE];
 GIDTPTR idt_ptr; // 0~15:Limit  16~47:Base
-
-TSS tss;
 
 void set_seg_desc(DESCRIPTOR *pDesc, unsigned int base, unsigned int limit,
                   unsigned short attr)
@@ -20,8 +18,8 @@ void set_seg_desc(DESCRIPTOR *pDesc, unsigned int base, unsigned int limit,
     pDesc->base_high = (base >> 24) & 0xFF; /* 段基址 3        (1 字节) */
 }
 
-unsigned int seg2phys(unsigned short seg)
+unsigned int gdt_desc_base(SELECTOR seg)
 {
-    DESCRIPTOR *pDest = &gdt[seg >> 3];
-    return (pDest->base_high << 24) | (pDest->base_mid << 16) | (pDest->base_low);
+    DESCRIPTOR *desc = &gdt[seg >> 3];
+    return BASE_OF_DESC(*desc);
 }

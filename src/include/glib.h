@@ -15,9 +15,19 @@ typedef struct s_sheet
     int flags;          // 图层设定
 } SHEET;
 
+typedef struct s_shtctl
+{
+    unsigned char *map; // 大小等于xsize*ysize, 用来表示每个像素属于哪个图层
+    SHEET *sheets[MAX_SHEETS];
+    int xsize, ysize, top;
+    SHEET _sheets[MAX_SHEETS];
+} SHTCTL;
+
 extern int scr_x;
 extern int scr_y;
 extern int scr_bpp;
+
+extern SHTCTL *ctl;
 
 #define PEN_BLACK        0  //黑
 #define PEN_RED          1  //梁红
@@ -36,6 +46,17 @@ extern int scr_bpp;
 #define PEN_DARK_BLUE    14 //浅暗蓝
 #define PEN_DARK_GRAY    15 //暗灰
 
+typedef struct s_canvas
+{
+    unsigned char *buf;
+    int pitch;
+} CANVAS;
+
+typedef struct s_rect
+{
+    int x, y, w, h;
+} RECT;
+
 extern const unsigned char cursor[16];
 
 void initPalette();
@@ -44,11 +65,20 @@ void cacheFonts();
 
 void init_video();
 
+void drawTextboxTo(unsigned char *buf, int pitch, int x0, int y0, int x1,
+                   int y1, int c);
+
 void setPalette(int start, int end, const unsigned char *palette);
 
 void putPixelTo(unsigned char *dst, int pitch, int x, int y, int color);
 
 void putPixel(int x, int y, int color);
+
+void drawTextToClr(unsigned char *dst, int pitch, int x, int y, const char *str,
+                   int color, int back);
+
+void drawCircleTo(unsigned char *buf, int pitch, int xc, int yc, int r,
+                  int color);
 
 void drawRectTo(unsigned char *dst, int pitch, int x1, int y1, int x2, int y2,
                 int color);

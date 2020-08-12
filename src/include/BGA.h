@@ -51,4 +51,5 @@ void bga_write_register(unsigned short index, unsigned short data);
 unsigned short bga_read_register(unsigned short index);
 void bga_set_video_mode(unsigned int Width, unsigned int Height,
                         unsigned int BitDepth, int use_lfb, int clear);
-void bga_set_bank(unsigned short BankNumber);
+
+int bga_get_lfb_addr();

@@ -1,9 +1,6 @@
+// #include <bird/sys.h>
 #include <asm/io.h>
 #include <BGA.h>
-
-unsigned int cur_bank;
-unsigned int bank_start, bank_end;
-const unsigned int bank_size = 0x10000;
 
 void bga_write_register(unsigned short index, unsigned short data)
 {
@@ -29,12 +26,21 @@ void bga_set_video_mode(unsigned int Width, unsigned int Height,
                            | (clear ? 0 : VBE_DISPI_NOCLEARMEM));
 }
 
-void bga_set_bank(unsigned short BankNumber)
+int bga_get_lfb_addr()
 {
-    cur_bank   = BankNumber;
-    bank_start = cur_bank * bank_size;
-    bank_end   = bank_start + bank_size;
-    io_cli();
-    bga_write_register(VBE_DISPI_INDEX_BANK, BankNumber);
-    io_sti();
+    for (int bus = 0; bus < 5; bus++)
+    {
+        for (int device = 0; device < 32; device++)
+        {
+            int paddr = (0x80000000 | (bus << 16) | (device << 11));
+            out32(0xcf8, paddr);
+            int in = in32(0xcfc);
+            if (in == 0x11111234)
+            {
+                out32(0xcf8, paddr | 0x10); // BAR0
+                return in32(0xcfc);
+            }
+        }
+    }
+    return 0;
 }

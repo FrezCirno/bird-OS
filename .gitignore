@@ -4,4 +4,8 @@ tools
 *.o
 *.bin
 *.img
-src/build.img
+build.img
+dump.txt
+test.c
+test2.c
+test

@@ -12,7 +12,8 @@ unsigned int memtest(unsigned int start, unsigned int end);
 
 typedef struct s_FREEINFO
 {
-    unsigned int addr, size;
+    unsigned char *addr;
+    unsigned int size;
 } FREEINFO;
 
 typedef struct s_MEMMAN
@@ -23,10 +24,10 @@ typedef struct s_MEMMAN
 
 unsigned int mm_init();
 unsigned int mm_total();
-unsigned int mm_alloc(unsigned int size);
-int mm_free(unsigned int addr, unsigned int size);
-unsigned int mm_alloc_4k(unsigned int size);
-int mm_free_4k(unsigned int addr, unsigned int size);
+unsigned char *mm_alloc(unsigned int size);
+int mm_free(void *addr, unsigned int size);
+unsigned char *mm_alloc_4k(unsigned int size);
+int mm_free_4k(void *addr, unsigned int size);
 
 typedef struct s_ard
 {

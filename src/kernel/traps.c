@@ -1,8 +1,7 @@
-#include <int.h>
-#include <glib.h>   //
+#include <glib.h>   // printstr
 #include <string.h> // itoa
 
-// 异常处理函数 // 0x1009a4
+// <R0> 异常处理函数
 void exception_handler(unsigned int vec_no, unsigned int err_code,
                        unsigned int eip, unsigned int cs, unsigned int eflags)
 {
@@ -29,9 +28,6 @@ void exception_handler(unsigned int vec_no, unsigned int err_code,
         "#XF SIMD Floating-Point Exception"};
 
     int text_color = PEN_WHITE;
-    fillRect(0, 0, scr_x, 5 * fonts.Height, PEN_BLACK);
-
-    gotoxy(0, 0);
 
     printstr("Exception! --> ", text_color);
     printstr(err_msg[vec_no], text_color);

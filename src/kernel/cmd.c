@@ -1,12 +1,8 @@
-#include <types.h>
 #include <protect.h>
 #include <string.h>
 #include <proc.h>
 #include <keyboard.h>
-#include <tty.h>
-
-#define TTY_FIRST (tty_table)
-#define TTY_END   (tty_table + NR_CONSOLES)
+#include <cmd.h>
 
 void init_tty(TTY *p_tty);
 void tty_do_read(TTY *p_tty);
@@ -18,21 +14,11 @@ void tty_do_write(TTY *p_tty);
 void task_tty()
 {
     TTY *p_tty;
-
-    init_keyboard();
-
-    for (p_tty = TTY_FIRST; p_tty < TTY_END; p_tty++)
-    {
-        init_tty(p_tty);
-    }
-    nr_current_console = 0;
+    init_tty(p_tty);
     while (1)
     {
-        for (p_tty = TTY_FIRST; p_tty < TTY_END; p_tty++)
-        {
-            tty_do_read(p_tty);
-            tty_do_write(p_tty);
-        }
+        tty_do_read(p_tty);
+        tty_do_write(p_tty);
     }
 }
 

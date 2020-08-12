@@ -18,8 +18,8 @@ SHEET *mouse_sht;
 void wait_KBC_sendready()
 {
     /* 等待键盘控制电路准备完毕 */
-    for (;;)
-        if ((in8(MOUSE_PORT_CMD) & MOUSE_NOT_READY) == 0) break;
+    while ((in8(MOUSE_PORT_CMD) & MOUSE_NOT_READY) != 0)
+        ;
 }
 
 void init_mouse()
@@ -33,7 +33,7 @@ void init_mouse()
     wait_KBC_sendready();
     out8(MOUSE_PORT_CMD, KEYCMD_SENDTO_MOUSE);
     wait_KBC_sendready();
-    out8(MOUSE_PORT_DATA, MOUSE_ENABLE);
+    out8(MOUSE_PORT_DATA, MOUSE_CMD_ENABLE);
     /* 顺利的话，键盘控制器会返回ACK(0xfa) */
 
     mouse_x    = scr_x / 2;
@@ -47,7 +47,7 @@ void init_mouse()
     fillRectTo(mouse_sht->buf, 8, 0, 0, 8, 16, 255);
     drawGlyphTo(mouse_sht->buf, 8, 0, 0, cursor, PEN_WHITE);
     movexy(mouse_sht, mouse_x, mouse_y);
-    movez(mouse_sht, 2);
+    movez(mouse_sht, ctl->top + 1);
 
     put_irq_handler(INT_VECTOR_IRQ_MOUSE, mouse_handler);
     enable_irq(INT_VECTOR_IRQ_MOUSE);
@@ -108,10 +108,9 @@ void mouse_read()
 {
     if (mouse_in.size)
     {
-        io_cli();
+        cli();
         int i = fifo_pop(&mouse_in);
-        io_sti();
-
+        sti();
         if (mouse_decode(i) != 0)
         {
             /* 鼠标指针的移动 */

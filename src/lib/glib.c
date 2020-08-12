@@ -1,10 +1,11 @@
 #include <asm/io.h>
 #include <bird/memory.h>
+#include <bird/protect.h>
 #include <glib.h>
 #include <string.h>
 #include <font.h>
 
-unsigned char *vram = (unsigned char *)0xa0000;
+unsigned char *vram;
 int scr_x;
 int scr_y;
 int scr_bpp;
@@ -15,25 +16,7 @@ int cur_y;
 
 int fontsmap[65536];
 
-const unsigned char cursor[16] = {
-    X_______, XX______, XXX_____, XXXX____, XXXXX___, XXXXXX__, XXXXXXX_,
-    XXXXXXXX, XXXXX___, XX_XX___, ____XX__, ____XX__, _____XX_};
-
-const unsigned char closebtn[2][16] = {
-    {________, ________, ________, ____XX__, _____XX_, ______XX, _______X,
-     ______XX, _____XX_, ____XX__, ________, ________, ________},
-    {________, ________, ________, __XX____, _XX_____, XX______, X_______,
-     XX______, _XX_____, __XX____, ________, ________, ________}};
-
 #define abs(x) ((x) > 0 ? (x) : (-(x)))
-
-typedef struct s_shtctl
-{
-    unsigned char *map; // 大小等于xsize*ysize, 用来表示每个像素属于哪个图层
-    int xsize, ysize, top;
-    SHEET *sheets[MAX_SHEETS];
-    SHEET _sheets[MAX_SHEETS];
-} SHTCTL;
 
 SHTCTL *ctl;
 
@@ -44,19 +27,17 @@ void init_video()
     scr_bpp   = 8;
     scr_pitch = scr_x * scr_bpp / 8;
 
-    bga_set_video_mode(scr_x, scr_y, scr_bpp, 0, 0);
-    bga_set_bank(0);
+    bga_set_video_mode(scr_x, scr_y, scr_bpp, 1, 1);
+
+    vram = (unsigned char *)bga_get_lfb_addr();
+
+    set_seg_desc(&gdt[SELECTOR_VIDEO], (unsigned int)vram, scr_x * scr_y,
+                 DA_P | DA_DRW | DA_DPL3);
+
     initPalette();
     cacheFonts();
 
     init_sheets(scr_x, scr_y);
-
-    // 默认颜色背景
-    SHEET *bg = alloc_sheet();
-    sheet_setbuf(bg, (unsigned char *)mm_alloc_4k(scr_x * scr_y), scr_x, scr_y,
-                 -1);
-    memset(bg->buf, PEN_BLACK, scr_x * scr_y);
-    movez(bg, 0);
 }
 
 void initPalette()
@@ -84,8 +65,8 @@ void initPalette()
 
 void setPalette(int start, int end, const unsigned char *palette)
 {
-    unsigned int eflags = io_load_eflags();
-    io_cli();
+    unsigned int eflags = load_eflags();
+    cli();
     out8(0x03c8, start);
     for (int i = start; i <= end; i++)
     {
@@ -94,7 +75,7 @@ void setPalette(int start, int end, const unsigned char *palette)
         out8(0x03c9, palette[2] / 4);
         palette += 3;
     }
-    io_store_eflags(eflags);
+    store_eflags(eflags);
 }
 
 void cacheFonts()
@@ -108,22 +89,13 @@ void cacheFonts()
 
 void putPixelTo(unsigned char *dst, int pitch, int x, int y, int color)
 {
-    unsigned int base = y * pitch + x;
-    dst[base]         = color;
+    dst[y * pitch + x] = color;
 }
 
 void putPixel(int x, int y, int color)
 {
-    // 每个bank 0xa0000-0xb0000 共 0x10000 = 64K 字节
-    // 显存一共800*600共 480000 字节
-    // 8个bank
-    // bank n offset m <-> (n << 16) | m <-> 0xa0000 | m
     unsigned int base = y * scr_pitch + x;
-    if (base < bank_start || base >= bank_end)
-    {
-        bga_set_bank(base >> 16);
-    }
-    vram[base & 0xffff] = color;
+    vram[base]        = color;
 }
 
 void drawLineTo(unsigned char *dst, int pitch, int x0, int y0, int x1, int y1,
@@ -264,47 +236,36 @@ void fillRect(int x1, int y1, int x2, int y2, int color)
 void drawGlyphTo(unsigned char *dst, int pitch, int x, int y,
                  const unsigned char *glyph, int color)
 {
-    unsigned int base = y * pitch + x;
+    unsigned char *base = dst + y * pitch + x;
     for (int in_y = 0; in_y < 16; in_y++)
     {
-        unsigned char line   = glyph[in_y];
-        unsigned char mask   = 0x80;
-        unsigned int in_base = base;
-        while (mask)
-        {
-            if (line & mask)
-            {
-                dst[in_base] = color;
-            }
-            in_base++;
-            mask >>= 1;
-        }
+        unsigned char line = glyph[in_y];
+        if (line & 0x80) base[0] = color;
+        if (line & 0x40) base[1] = color;
+        if (line & 0x20) base[2] = color;
+        if (line & 0x10) base[3] = color;
+        if (line & 0x8) base[4] = color;
+        if (line & 0x4) base[5] = color;
+        if (line & 0x2) base[6] = color;
+        if (line & 0x1) base[7] = color;
         base += pitch;
     }
 }
 
 void drawGlyph(int x, int y, const unsigned char *glyph, int color)
 {
-    unsigned int base = y * scr_pitch + x;
     for (int in_y = 0; in_y < fonts.Height; in_y++)
     {
-        unsigned char line   = glyph[in_y];
-        unsigned char mask   = 0x80;
-        unsigned int in_base = base;
-        while (mask)
-        {
-            if (line & mask)
-            {
-                if (in_base < bank_start || in_base >= bank_end)
-                {
-                    bga_set_bank(in_base >> 16);
-                }
-                vram[in_base & 0xffff] = color;
-            }
-            in_base++;
-            mask >>= 1;
-        }
-        base += scr_pitch;
+        unsigned char line = glyph[in_y];
+        int offy           = y + in_y;
+        if (line & 0x80) putPixel(x + 0, offy, color);
+        if (line & 0x40) putPixel(x + 1, offy, color);
+        if (line & 0x20) putPixel(x + 2, offy, color);
+        if (line & 0x10) putPixel(x + 3, offy, color);
+        if (line & 0x8) putPixel(x + 4, offy, color);
+        if (line & 0x4) putPixel(x + 5, offy, color);
+        if (line & 0x2) putPixel(x + 6, offy, color);
+        if (line & 0x1) putPixel(x + 7, offy, color);
     }
 }
 
@@ -318,6 +279,14 @@ void drawChar(int x, int y, char ch, int color)
 {
     const unsigned char *font_data = &fonts.Bitmap[16 * fontsmap[ch]];
     drawGlyph(x, y, font_data, color);
+}
+
+void drawTextToClr(unsigned char *dst, int pitch, int x, int y, const char *str,
+                   int color, int back)
+{
+    fillRectTo(dst, pitch, x, y, x + strlen(str) * fonts.Width, fonts.Height,
+               back);
+    drawTextTo(dst, pitch, x, y, str, color);
 }
 
 void drawTextTo(unsigned char *dst, int pitch, int x, int y, const char *str,
@@ -380,9 +349,30 @@ void printstr(const char *str, int color)
     }
 }
 
+void drawTextboxTo(unsigned char *buf, int pitch, int x0, int y0, int x1,
+                   int y1, int c)
+{
+    drawLineTo(buf, pitch, x0 - 2, y0 - 3, x1 + 1, y0 - 3, PEN_DARK_CLAN); // top
+    drawLineTo(buf, pitch, x0 - 3, y0 - 3, x0 - 3, y1 + 1, PEN_DARK_CLAN); // left
+    drawLineTo(buf, pitch, x0 - 3, y1 + 2, x1 + 1, y1 + 2, PEN_WHITE); // bottom
+    drawLineTo(buf, pitch, x1 + 2, y0 - 3, x1 + 2, y1 + 2, PEN_WHITE); // right
+    drawLineTo(buf, pitch, x0 - 1, y0 - 2, x1 + 0, y0 - 2, PEN_BLACK); // top2
+    drawLineTo(buf, pitch, x0 - 2, y0 - 2, x0 - 2, y1 + 0, PEN_BLACK); // left2
+    drawLineTo(buf, pitch, x0 - 2, y1 + 1, x1 + 0, y1 + 1, PEN_LIGHT_GRAY); // btm2
+    drawLineTo(buf, pitch, x1 + 1, y0 - 2, x1 + 1, y1 + 1, PEN_LIGHT_GRAY); // right2
+    fillRectTo(buf, pitch, x0 - 1, y0 - 1, x1 + 0, y1 + 0, c); // border
+}
+
 void drawWindowTo(unsigned char *buf, int pitch, int xsize, int ysize,
                   const char *title)
 {
+    static char closebtn[14][16] = {
+        "OOOOOOOOOOOOOOO@", "OQQQQQQQQQQQQQ$@", "OQQQQQQQQQQQQQ$@",
+        "OQQQ@@QQQQ@@QQ$@", "OQQQQ@@QQ@@QQQ$@", "OQQQQQ@@@@QQQQ$@",
+        "OQQQQQQ@@QQQQQ$@", "OQQQQQ@@@@QQQQ$@", "OQQQQ@@QQ@@QQQ$@",
+        "OQQQ@@QQQQ@@QQ$@", "OQQQQQQQQQQQQQ$@", "OQQQQQQQQQQQQQ$@",
+        "O$$$$$$$$$$$$$$@", "@@@@@@@@@@@@@@@@"};
+    int x, y;
     drawLineTo(buf, pitch, 0, 0, xsize, 0, PEN_LIGHT_GRAY);            // top
     drawLineTo(buf, pitch, 1, 1, xsize - 1, 1, PEN_WHITE);             // top2
     drawLineTo(buf, pitch, 0, 0, 0, ysize, PEN_LIGHT_GRAY);            // left
@@ -399,21 +389,36 @@ void drawWindowTo(unsigned char *buf, int pitch, int xsize, int ysize,
     drawTextTo(buf, pitch, 24, 4, title, PEN_WHITE);
 
     fillRectTo(buf, pitch, xsize - 19, 5, xsize - 5, 18, PEN_LIGHT_GRAY);
-    drawGlyphTo(buf, pitch, xsize - 20, 5, closebtn[0], PEN_BLACK);
-    drawGlyphTo(buf, pitch, xsize - 20 + 8, 5, closebtn[1], PEN_BLACK);
+
+    for (y = 0; y < 14; y++)
+    {
+        for (x = 0; x < 16; x++)
+        {
+            char c = closebtn[y][x];
+            if (c == '@')
+                c = PEN_BLACK;
+            else if (c == '$')
+                c = PEN_DARK_GRAY;
+            else if (c == 'Q')
+                c = PEN_LIGHT_GRAY;
+            else
+                c = PEN_WHITE;
+            putPixelTo(buf, pitch, xsize + x - 20, y + 5, c);
+        }
+    }
 }
 
 int init_sheets(int x_size, int y_size)
 {
     ctl = (SHTCTL *)mm_alloc_4k(sizeof(SHTCTL));
-    if (ctl == 0)
+    if (ctl == NULL)
     {
         return -1;
     }
     ctl->map = (unsigned char *)mm_alloc_4k(x_size * y_size);
     if (ctl->map == 0)
     {
-        mm_free_4k((unsigned int)ctl, sizeof(MEMMAN));
+        mm_free_4k(ctl, sizeof(MEMMAN));
         return -1;
     }
     ctl->xsize = x_size;
@@ -493,7 +498,6 @@ void movez(SHEET *sht, int height)
             }
             ctl->top--; /* 由于显示中的图层减少了一个，所以最上面的图层高度下降 */
         }
-        /* 按新图层的信息重新绘制画面 */
         refresh_map(sht->vx0, sht->vy0, sht->vx0 + sht->bxsize,
                     sht->vy0 + sht->bysize, height);
         refresh(sht->vx0, sht->vy0, sht->vx0 + sht->bxsize,
@@ -522,7 +526,6 @@ void movez(SHEET *sht, int height)
             ctl->sheets[height] = sht;
             ctl->top++; /* 由于已显示的图层增加了1个，所以最上面的图层高度增加 */
         }
-        /* 按新图层信息重新绘制画面 */
         refresh_map(sht->vx0, sht->vy0, sht->vx0 + sht->bxsize,
                     sht->vy0 + sht->bysize, height);
         refresh(sht->vx0, sht->vy0, sht->vx0 + sht->bxsize,
@@ -534,11 +537,14 @@ void refresh_local(SHEET *sht, int bx0, int by0, int bx1, int by1)
 {
     if (sht->height >= 0)
     { /* 如果正在显示，则按新图层的信息刷新画面*/
+        refresh_map(sht->vx0 + bx0, sht->vy0 + by0, sht->vx0 + bx1,
+                    sht->vy0 + by1, sht->height);
         refresh(sht->vx0 + bx0, sht->vy0 + by0, sht->vx0 + bx1, sht->vy0 + by1,
                 sht->height, sht->height);
     }
 }
 
+// 预计算一遍所有像素属于的图层
 void refresh_map(int vx0, int vy0, int vx1, int vy1, int h0)
 {
     /* 如果refresh的范围超出了画面则修正 */
@@ -554,7 +560,7 @@ void refresh_map(int vx0, int vy0, int vx1, int vy1, int h0)
         unsigned char *buf = sht->buf;
         unsigned char *map = ctl->map;
 
-        /* 计算相对clipbox */
+        /* 计算相对图层的clipbox */
         int bx0 = vx0 - sht->vx0;
         int bx1 = vx1 - sht->vx0;
         int by0 = vy0 - sht->vy0;
@@ -566,21 +572,20 @@ void refresh_map(int vx0, int vy0, int vx1, int vy1, int h0)
 
         for (int by = by0; by < by1; by++)
         {
-            int vy = sht->vy0 + by;
+            int vy     = (sht->vy0 + by) * ctl->xsize + sht->vx0;
+            int x_base = by * sht->bxsize;
             for (int bx = bx0; bx < bx1; bx++)
             {
-                int vx              = sht->vx0 + bx;
-                unsigned char color = buf[by * sht->bxsize + bx];
-                int voffset         = vy * ctl->xsize + vx;
-                if (color != sht->col_inv)
+                if (buf[x_base + bx] != sht->col_inv)
                 {
-                    map[voffset] = sid;
+                    map[vy + bx] = sid;
                 }
             }
         }
     }
 }
 
+// 根据map的信息绘制像素
 void refresh(int vx0, int vy0, int vx1, int vy1, int h0, int h1)
 {
     /* 如果refresh的范围超出了画面则修正 */
@@ -609,15 +614,15 @@ void refresh(int vx0, int vy0, int vx1, int vy1, int h0, int h1)
 
         for (int by = by0; by < by1; by++)
         {
-            int vy = sht->vy0 + by;
+            int vy     = sht->vy0 + by;
+            int m_base = vy * ctl->xsize;
+            int c_base = by * sht->bxsize;
             for (int bx = bx0; bx < bx1; bx++)
             {
-                int vx      = sht->vx0 + bx;
-                int voffset = vy * ctl->xsize + vx;
-                if (map[voffset] == sid)
+                int vx = sht->vx0 + bx;
+                if (map[m_base + vx] == sid)
                 {
-                    unsigned char color = buf[by * sht->bxsize + bx];
-                    putPixel(vx, vy, color);
+                    putPixel(vx, vy, buf[c_base + bx]);
                 }
             }
         }
@@ -630,13 +635,45 @@ void movexy(SHEET *sht, int vx0, int vy0)
     sht->vx0 = vx0;
     sht->vy0 = vy0;
     if (sht->height >= 0)
-    { /* 如果正在显示，则按新图层的信息刷新画面 */
+    {
+        // 旧的区域全部重新判断
         refresh_map(old_vx0, old_vy0, old_vx0 + sht->bxsize,
                     old_vy0 + sht->bysize, 0);
+        // 新的区域只需要从当前层-1开始判断
         refresh_map(vx0, vy0, vx0 + sht->bxsize, vy0 + sht->bysize, sht->height);
+        // 重绘旧的区域
         refresh(old_vx0, old_vy0, old_vx0 + sht->bxsize, old_vy0 + sht->bysize,
                 0, sht->height - 1);
+        // 新的区域只需要绘制新增的部分
         refresh(vx0, vy0, vx0 + sht->bxsize, vy0 + sht->bysize, sht->height,
                 sht->height);
+    }
+}
+
+void drawCircleTo(unsigned char *buf, int pitch, int xc, int yc, int r, int color)
+{
+    // Bresenham画圆算法
+    int x = 0, y = r, d = 3 - 2 * r;
+    while (1)
+    {
+        putPixelTo(buf, pitch, xc + x, yc + y, color);
+        putPixelTo(buf, pitch, xc + y, yc + x, color);
+        putPixelTo(buf, pitch, xc + x, yc - y, color);
+        putPixelTo(buf, pitch, xc + y, yc - x, color);
+        putPixelTo(buf, pitch, xc - x, yc + y, color);
+        putPixelTo(buf, pitch, xc - y, yc + x, color);
+        putPixelTo(buf, pitch, xc - x, yc - y, color);
+        putPixelTo(buf, pitch, xc - y, yc - x, color);
+        if (x >= y) break;
+        if (d < 0)
+        {
+            d = d + 4 * x + 6;
+        }
+        else
+        {
+            d = d + 4 * (x - y) + 10;
+            y--;
+        }
+        x++;
     }
 }

@@ -1,7 +1,7 @@
 #include <asm/io.h>
 #include <bird/memory.h>
+#include <bird/protect.h>
 #include <string.h>
-#include <protect.h>
 
 #define PDE_ADDR 0x200000 // PDE放置位置 大小 固定0x1000 必须按4KB对齐
 // 内核在0x100000
@@ -17,10 +17,10 @@ unsigned char *MemChkBuf;
 
 unsigned int mm_init()
 {
-    memman->frees    = 0; /* 可用信息数目 */
-    memman->maxfrees = 0; /* 用于观察可用状况：frees的最大值 */
-    memman->lostsize = 0; /* 释放失败的内存的大小总和 */
-    memman->losts    = 0; /* 释放失败次数 */
+    memman->frees    = 0; // 可用信息数目
+    memman->maxfrees = 0; // 用于观察可用状况：frees的最大值
+    memman->lostsize = 0; // 释放失败的内存的大小总和
+    memman->losts    = 0; // 释放失败次数
 
     unsigned int total   = 0;
     unsigned int highest = 0;
@@ -45,7 +45,7 @@ unsigned int mm_init()
     }
     // setup_paging(highest);
 
-    mm_free(0x400000, highest - 0x400000);
+    mm_free((unsigned char *)0x400000, highest - 0x400000);
 
     return total;
 }
@@ -60,14 +60,14 @@ unsigned int mm_total()
     return t;
 }
 
-unsigned int mm_alloc(unsigned int size)
+unsigned char *mm_alloc(unsigned int size)
 {
     for (int i = 0; i < memman->frees; i++)
     {
         if (memman->free[i].size >= size)
         {
             /* 找到了足够大的内存 */
-            unsigned int a = memman->free[i].addr;
+            unsigned char *a = memman->free[i].addr;
             memman->free[i].addr += size;
             memman->free[i].size -= size;
             if (memman->free[i].size == 0)
@@ -82,17 +82,17 @@ unsigned int mm_alloc(unsigned int size)
             return a;
         }
     }
-    return 0; /* 没有可用空间 */
+    return NULL; /* 没有可用空间 */
 }
 
-int mm_free(unsigned int addr, unsigned int size)
+int mm_free(void *addr, unsigned int size)
 {
     int i, j;
     /* 为便于归纳内存，将free[]按照addr的顺序排列 */
     /* 所以，先决定应该放在哪里 */
     for (i = 0; i < memman->frees; i++)
     {
-        if (memman->free[i].addr > addr)
+        if (memman->free[i].addr > (unsigned char*)addr)
         {
             break;
         }
@@ -159,13 +159,13 @@ int mm_free(unsigned int addr, unsigned int size)
     return -1; /* 失败 */
 }
 
-unsigned int mm_alloc_4k(unsigned int size)
+unsigned char *mm_alloc_4k(unsigned int size)
 {
     size = (size + 0xfff) & 0xfffff000;
     return mm_alloc(size);
 }
 
-int mm_free_4k(unsigned int addr, unsigned int size)
+int mm_free_4k(void *addr, unsigned int size)
 {
     size = (size + 0xfff) & 0xfffff000;
     return mm_free(addr, size);
@@ -181,13 +181,13 @@ void setup_paging(unsigned int memsize)
     {
         pde[i] = (PTE_ADDR + (i << 12)) | PG_P | PG_RW; // 每个PTE占 4KB
     }
-    
+
     for (int i = 0; i < pte_count; i++)
     {
         pte[i] = ((i << 12) | PG_P | PG_RW);
     }
 
-    io_store_cr3(PDE_ADDR);
-    unsigned int cr0 = io_load_cr0();
-    io_store_cr0(cr0 | 0x80000000);
+    store_cr3(PDE_ADDR);
+    unsigned int cr0 = load_cr0();
+    store_cr0(cr0 | 0x80000000);
 }

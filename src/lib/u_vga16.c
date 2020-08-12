@@ -3,6 +3,22 @@
 
 #include "font.h"
 
+const unsigned char cursor[16] = {
+    X_______, 
+    XX______, 
+    XXX_____, 
+    XXXX____, 
+    XXXXX___, 
+    XXXXXX__, 
+    XXXXXXX_,
+    XXXXXXXX, 
+    XXXXX___, 
+    XX_XX___, 
+    ____XX__, 
+    ____XX__, 
+    _____XX_
+};
+
 /// character bitmap for each encoding
 static const unsigned char __font_bitmap__[] = {
     //   0 $00 'char0'

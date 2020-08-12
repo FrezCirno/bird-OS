@@ -270,3 +270,5 @@ struct bitmap_font
 };
 
 extern const struct bitmap_font fonts;
+
+extern const unsigned char cursor[16];

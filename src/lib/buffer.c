@@ -29,15 +29,9 @@ int fifo_push(FIFO_BUFFER *fifo, unsigned char data)
 
 int fifo_pop(FIFO_BUFFER *fifo)
 {
-    if (fifo->size == 0)
-    {
-        return -1;
-    }
+    if (fifo->size == 0) return -1;
     int data = *fifo->p_tail++;
-    if (fifo->p_tail == fifo->buf + fifo->capacity)
-    {
-        fifo->p_tail = fifo->buf;
-    }
+    if (fifo->p_tail == fifo->buf + fifo->capacity) fifo->p_tail = fifo->buf;
     fifo->size--;
     return data;
 }

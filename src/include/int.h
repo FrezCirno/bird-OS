@@ -1,5 +1,11 @@
 #pragma once
 
+#define INT_PORT_MASTER_CMD  0x20
+#define INT_PORT_MASTER_DATA 0x21
+#define INT_PORT_SLAVE_CMD   0xA0
+#define INT_PORT_SLAVE_DATA  0xA1
+#define INT_EOI              0x20
+
 /* 中断向量表 */
 // 硬件异常
 #define INT_VECTOR_DIVIDE       0x0
@@ -32,31 +38,25 @@
 #define INT_VECTOR_IRQ_REDRT    0x9
 #define INT_VECTOR_IRQ_MOUSE    0xC
 #define INT_VECTOR_IRQ_FPU      0xD
-#define INT_VECTOR_IRQ_AT       0xE
+#define INT_VECTOR_IRQ_AT       0xE // 硬盘1
+#define INT_VECTOR_IRQ_AT_SECO  0xF // 硬盘2
 // 软件中断, 由 int 指令产生
-#define INT_VECTOR_SYS_CALL 0x90
+#define INT_VECTOR_SYS_CALL 0x80
 
-#define NR_IRQ      16
-#define NR_SYS_CALL 10
+#define NR_IRQ 16
 
 typedef void (*int_handler)();
 typedef void (*irq_handler)(unsigned int);
 
 extern irq_handler irq_table[NR_IRQ];
-extern void *syscall_table[NR_SYS_CALL];
 
-// int_ctl.c
-void disable_irq(unsigned int irq);
-void enable_irq(unsigned int irq);
-
-// exceptionh.c
+// traps.c
 void exception_handler(unsigned int vec_no, unsigned int err_code,
                        unsigned int eip, unsigned int cs, unsigned int eflags);
 
 // irqh.c
+void init_pic();
 void default_irq_handler(unsigned int irq);
 void put_irq_handler(unsigned int irq, irq_handler handler);
-
-// syscallh.c
-int sys_getticks();
-int sys_nothing();
+void disable_irq(unsigned int irq);
+void enable_irq(unsigned int irq);

@@ -164,86 +164,228 @@ void keyboard_handler(unsigned int irq)
     fifo_push(&kb_in, in8(KB_DATA));
 }
 
+unsigned char get_byte_from_kbuf()
+{
+    unsigned char scan_code;
+
+    while (kb_in.size <= 0) continue;
+
+    cli();
+    scan_code = fifo_pop(&kb_in);
+    sti();
+
+    return scan_code;
+}
+
+void kb_wait() /* 等待 8042 的输入缓冲区空 */
+{
+    unsigned char kb_stat;
+
+    do
+    {
+        kb_stat = in8(KB_CMD);
+    } while (kb_stat & 0x02);
+}
+
+void kb_ack()
+{
+    unsigned char kb_read;
+
+    do
+    {
+        kb_read = in8(KB_DATA);
+    } while (kb_read = !KB_ACK);
+}
+
+void set_leds()
+{
+    unsigned char leds = (caps_lock << 2) | (num_lock << 1) | scroll_lock;
+
+    kb_wait();
+    out8(KB_DATA, LED_CODE);
+    kb_ack();
+
+    kb_wait();
+    out8(KB_DATA, leds);
+    kb_ack();
+}
+
 void keyboard_read()
 {
     char output[2];
+    unsigned int key;
+    int is_make; /* 1: make;  0: break. */
 
     if (kb_in.size)
     {
-        io_cli();
-        unsigned char scan_code = fifo_pop(&kb_in);
-        io_sti();
+        unsigned char scan_code = get_byte_from_kbuf();
 
-        /* 下面开始解析扫描码 */
         if (scan_code == 0xE1)
         {
-            /* 暂时不做任何操作 */
+            int i;
+            unsigned char pausebrk_scode[] = {0xE1, 0x1D, 0x45,
+                                              0xE1, 0x9D, 0xC5};
+            int is_pausebreak              = 1;
+            for (i = 1; i < 6; i++)
+            {
+                if (get_byte_from_kbuf() != pausebrk_scode[i])
+                {
+                    is_pausebreak = 0;
+                    break;
+                }
+            }
+            if (is_pausebreak)
+            {
+                key = PAUSEBREAK;
+            }
         }
         else if (scan_code == 0xE0)
         {
-            code_with_E0 = 1;
+            scan_code = get_byte_from_kbuf();
+
+            /* PrintScreen 被按下 */
+            if (scan_code == 0x2A)
+            {
+                if (get_byte_from_kbuf() == 0xE0)
+                {
+                    if (get_byte_from_kbuf() == 0x37)
+                    {
+                        key     = PRINTSCREEN;
+                        is_make = 1;
+                    }
+                }
+            }
+            /* PrintScreen 被释放 */
+            if (scan_code == 0xB7)
+            {
+                if (get_byte_from_kbuf() == 0xE0)
+                {
+                    if (get_byte_from_kbuf() == 0xAA)
+                    {
+                        key     = PRINTSCREEN;
+                        is_make = 0;
+                    }
+                }
+            }
+            /* 不是PrintScreen, 此时scan_code为0xE0紧跟的那个值. */
+            if (key == 0)
+            {
+                code_with_E0 = 1;
+            }
         }
-        else
+
+        if ((key != PAUSEBREAK) && (key != PRINTSCREEN))
         { /* 下面处理可打印字符 */
 
             /* 首先判断Make Code 还是 Break Code */
-            int is_make = (scan_code & FLAG_BREAK ? 0 : 1);
+            is_make = (scan_code & FLAG_BREAK ? 0 : 1);
 
             /* 先定位到 keymap 中的行 */
             const unsigned int *keyrow = keymap[scan_code & 0x7F];
 
             column = 0;
-            if (shift_l || shift_r)
-            {
-                column = 1;
-            }
-            if (code_with_E0)
-            {
-                column       = 2;
-                code_with_E0 = 0;
-            }
 
-            unsigned int key = (unsigned int)keyrow[column];
+            int caps = shift_l || shift_r;
+            if (caps_lock)
+            {
+                if ((keyrow[0] >= 'a') && (keyrow[0] <= 'z'))
+                {
+                    caps = !caps;
+                }
+            }
+            if (caps) column = 1;
+
+            if (code_with_E0) column = 2;
+
+            key = keyrow[column];
 
             switch (key)
             {
-            case SHIFT_L:
-                shift_l = is_make;
-                key     = 0;
-                break;
-            case SHIFT_R:
-                shift_r = is_make;
-                key     = 0;
-                break;
-            case CTRL_L:
-                ctrl_l = is_make;
-                key    = 0;
-                break;
-            case CTRL_R:
-                ctrl_r = is_make;
-                key    = 0;
-                break;
-            case ALT_L:
-                alt_l = is_make;
-                key   = 0;
-                break;
-            case ALT_R:
-                alt_l = is_make;
-                key   = 0;
-                break;
-            default:
-                if (!is_make)
-                {            /* 如果是 Break Code */
-                    key = 0; /* 忽略之 */
+            case SHIFT_L: shift_l = is_make; break;
+            case SHIFT_R: shift_r = is_make; break;
+            case CTRL_L: ctrl_l = is_make; break;
+            case CTRL_R: ctrl_r = is_make; break;
+            case ALT_L: alt_l = is_make; break;
+            case ALT_R: alt_l = is_make; break;
+            case CAPS_LOCK:
+                if (is_make)
+                {
+                    caps_lock = !caps_lock;
+                    set_leds();
                 }
                 break;
+            case NUM_LOCK:
+                if (is_make)
+                {
+                    num_lock = !num_lock;
+                    set_leds();
+                }
+                break;
+            case SCROLL_LOCK:
+                if (is_make)
+                {
+                    scroll_lock = !scroll_lock;
+                    set_leds();
+                }
+                break;
+            default: break;
             }
 
-            /* 如果 Key 不为0说明是可打印字符，否则不做处理 */
-            if (key)
-            {
-                output[0] = key;
-                putchar(output[0], PEN_RED);
+            if (is_make)
+            { /* 忽略 Break Code */
+                int pad = 0;
+
+                /* 首先处理小键盘 */
+                if ((key >= PAD_SLASH) && (key <= PAD_9))
+                {
+                    pad = 1;
+                    switch (key)
+                    {
+                    case PAD_SLASH: key = '/'; break;
+                    case PAD_STAR: key = '*'; break;
+                    case PAD_MINUS: key = '-'; break;
+                    case PAD_PLUS: key = '+'; break;
+                    case PAD_ENTER: key = ENTER; break;
+                    default:
+                        if (num_lock && (key >= PAD_0) && (key <= PAD_9))
+                        {
+                            key = key - PAD_0 + '0';
+                        }
+                        else if (num_lock && (key == PAD_DOT))
+                        {
+                            key = '.';
+                        }
+                        else
+                        {
+                            switch (key)
+                            {
+                            case PAD_HOME: key = HOME; break;
+                            case PAD_END: key = END; break;
+                            case PAD_PAGEUP: key = PAGEUP; break;
+                            case PAD_PAGEDOWN: key = PAGEDOWN; break;
+                            case PAD_INS: key = INSERT; break;
+                            case PAD_UP: key = UP; break;
+                            case PAD_DOWN: key = DOWN; break;
+                            case PAD_LEFT: key = LEFT; break;
+                            case PAD_RIGHT: key = RIGHT; break;
+                            case PAD_DOT: key = DELETE; break;
+                            default: break;
+                            }
+                        }
+                        break;
+                    }
+                }
+
+                key |= shift_l ? FLAG_SHIFT_L : 0;
+                key |= shift_r ? FLAG_SHIFT_R : 0;
+                key |= ctrl_l ? FLAG_CTRL_L : 0;
+                key |= ctrl_r ? FLAG_CTRL_R : 0;
+                key |= alt_l ? FLAG_ALT_L : 0;
+                key |= alt_r ? FLAG_ALT_R : 0;
+                key |= pad ? FLAG_PAD : 0;
+
+                // in_process(p_tty, key);
+                putchar(key, PEN_BLUE);
             }
         }
     }

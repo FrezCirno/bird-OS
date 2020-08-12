@@ -1,29 +1,95 @@
 #pragma once
 
-void io_hlt();
+#define nop() __asm__("nop")
 
-unsigned int io_load_eflags();
-void io_store_eflags(unsigned int eflags);
+#define hlt() __asm__("hlt")
 
-unsigned int io_load_cr0();
-void io_store_cr0(unsigned int cr0);
+#define sti() __asm__("sti")
 
-unsigned int io_load_cr1();
-void io_store_cr1(unsigned int cr1);
+#define cli() __asm__("cli")
 
-unsigned int io_load_cr2();
-void io_store_cr2(unsigned int cr0);
+#define pushfl() __asm__("pushfl")
 
-unsigned int io_load_cr3();
-void io_store_cr3(unsigned int cr0);
+#define popfl() __asm__("popfl")
 
-void io_sti();
-void io_cli();
+#define load_eflags()         \
+    ({                        \
+        unsigned int res;     \
+        __asm__("pushfl\n\t"  \
+                "popl %0"     \
+                : "=m"(res)); \
+        res;                  \
+    })
 
-unsigned char in8(unsigned int port);
-unsigned short in16(unsigned int port);
-unsigned int in32(unsigned int port);
+#define store_eflags(e)   \
+    __asm__("push %0\n\t" \
+            "popfl" ::"m"(e))
 
-void out8(unsigned int port, unsigned char value);
-void out16(unsigned int port, unsigned short value);
-void out32(unsigned int port, unsigned int value);
+#define load_cr0()                                \
+    ({                                            \
+        unsigned int res;                         \
+        __asm__("movl %%cr0, %%eax" : "=a"(res)); \
+        res;                                      \
+    })
+
+#define store_cr0(e) __asm__("movl %0, %%cr0" ::"r"(e))
+
+#define load_cr1()                                \
+    ({                                            \
+        unsigned int res;                         \
+        __asm__("movl %%cr1, %%eax" : "=a"(res)); \
+        res;                                      \
+    })
+
+#define store_cr1(e) __asm__("movl %0, %%cr1" ::"r"(e))
+
+#define load_cr2()                                \
+    ({                                            \
+        unsigned int res;                         \
+        __asm__("movl %%cr2, %%eax" : "=a"(res)); \
+        res;                                      \
+    })
+
+#define store_cr2(e) __asm__("movl %0, %%cr2" ::"r"(e))
+
+#define load_cr3()                             \
+    ({                                         \
+        unsigned int res;                      \
+        __asm__("movl %%cr3, %0" : "=m"(res)); \
+        res;                                   \
+    })
+
+#define store_cr3(e) __asm__("movl %0, %%cr3" ::"r"(e))
+
+#define in8(port)                                                        \
+    ({                                                                   \
+        unsigned char _v;                                                \
+        __asm__("inb %%dx,%%al" : "=a"(_v) : "d"((unsigned short)port)); \
+        _v;                                                              \
+    })
+
+#define out8(port, val)                                  \
+    __asm__("outb %%al, %%dx" ::"a"((unsigned char)val), \
+            "d"((unsigned short)port))
+
+#define in16(port)                                                        \
+    ({                                                                    \
+        unsigned short _v;                                                \
+        __asm__("inw %%dx, %%ax" : "=a"(_v) : "d"((unsigned short)port)); \
+        _v;                                                               \
+    })
+
+#define out16(port, val)                                  \
+    __asm__("outw %%ax, %%dx" ::"a"((unsigned short)val), \
+            "d"((unsigned short)port))
+
+#define in32(port)                                                         \
+    ({                                                                     \
+        unsigned int _v;                                                   \
+        __asm__("inl %%dx, %%eax" : "=a"(_v) : "d"((unsigned short)port)); \
+        _v;                                                                \
+    })
+
+#define out32(port, val)                                 \
+    __asm__("outl %%eax, %%dx" ::"a"((unsigned int)val), \
+            "d"((unsigned short)port))

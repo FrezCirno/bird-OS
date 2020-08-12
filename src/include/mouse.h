@@ -1,12 +1,14 @@
 #pragma once
 
-#define MOUSE_PORT_DATA     0x0060
-#define MOUSE_PORT_CMD      0x0064
+#define MOUSE_PORT_DATA 0x60
+#define MOUSE_PORT_CMD  0x64
+
+#define MOUSE_CMD_ENABLE 0xf4 // Enable Packet Streaming
+
 #define MOUSE_NOT_READY     0x02
 #define MOUSE_WRITE_MODE    0x60
 #define KBC_MODE            0x47
 #define KEYCMD_SENDTO_MOUSE 0xd4
-#define MOUSE_ENABLE        0xf4
 
 typedef struct s_mouse_dec
 {

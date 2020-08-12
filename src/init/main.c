@@ -1,8 +1,8 @@
-#include <asm/io.h>    // out8
-#include <string.h>    // memcpy
-#include <protect.h>   // GATE, idt, gdt, tss
-#include <int.h>       // INT_VECTOR_*
-#include <bird/proc.h> // PROCESS
+#include <asm/io.h>       // out8
+#include <bird/protect.h> // GATE, idt, gdt, tss
+#include <bird/proc.h>    // PROCESS
+#include <string.h>       // memcpy
+#include <int.h>          // INT_VECTOR_*
 
 /* 8259A interrupt controller ports. */
 #define INT_PORT_MASTER_CMD  0x20
@@ -75,27 +75,6 @@ void init_igate(unsigned char vector, unsigned char desc_type,
     pGate->offset_high = (base >> 16) & 0xFFFF;
 }
 
-// 初始化8259A
-void init_pic()
-{
-    out8(INT_PORT_MASTER_CMD, 0x11); // Master 8259, ICW1.
-    out8(INT_PORT_SLAVE_CMD, 0x11);  // Slave  8259, ICW1.
-
-    /* Master 8259, ICW2. 设置 '主8259' 的中断入口地址为 0x20. */
-    out8(INT_PORT_MASTER_DATA, INT_VECTOR_IRQ);
-    /* Slave  8259, ICW2. 设置 '从8259' 的中断入口地址为 0x28 */
-    out8(INT_PORT_SLAVE_DATA, INT_VECTOR_IRQ + 8);
-
-    out8(INT_PORT_MASTER_DATA, 0x4); // Master 8259, ICW3. IR2 对应 '从8259'.
-    out8(INT_PORT_SLAVE_DATA, 0x2); // Slave  8259, ICW3. 对应 '主8259' 的 IR2.
-
-    out8(INT_PORT_MASTER_DATA, 0x1); // Master 8259, ICW4.
-    out8(INT_PORT_SLAVE_DATA, 0x1);  // Slave  8259, ICW4.
-
-    // 只保留Master的2号中断
-    out8(INT_PORT_MASTER_DATA, 0xFB); // Master 8259, OCW1.
-    out8(INT_PORT_SLAVE_DATA, 0xFF);  // Slave  8259, OCW1.
-}
 
 // 初始化 IDT
 void setup_idt()
@@ -149,7 +128,7 @@ void setup_idt()
 //     for (int i = 0; i < NR_TASKS; i++)
 //     {
 //         set_seg_desc(&gdt[INDEX_LDT_FIRST],
-//                  vir2phys(seg2phys(SELECTOR_KERNEL_DS), pProc->ldt),
+//                  vir2phys(gdt_desc_base(SELECTOR_KERNEL_DS), pProc->ldt),
 //                  LDT_SIZE * sizeof(DESCRIPTOR) - 1, DA_P | DA_LDT);
 //         pProc++;
 //         ldt_slt += 0x8;
@@ -162,6 +141,7 @@ void init_tss()
     memset(&tss, 0, sizeof(tss));
     tss.ss0    = SELECTOR_KERNEL_DS;
     tss.iobase = sizeof(tss); /* 没有I/O许可位图 */
-    set_seg_desc(&gdt[INDEX_TSS], vir2phys(seg2phys(SELECTOR_KERNEL_DS), &tss),
+    set_seg_desc(&gdt[INDEX_TSS],
+                 vir2phys(gdt_desc_base(SELECTOR_KERNEL_DS), &tss),
                  sizeof(tss) - 1, DA_P | DA_386TSS);
 }
