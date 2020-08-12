@@ -103,3 +103,6 @@ qemu:
 	gdb
 
 rebuild: clean build
+
+harddisk:
+	dd if=/dev/zero of=80m.img count=163840

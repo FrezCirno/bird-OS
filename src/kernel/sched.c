@@ -116,7 +116,9 @@ void init()
     unsigned char mbr[512] = {0, 1, 2,  3,  4,  5,  6,  7,
                               8, 9, 10, 11, 12, 13, 14, 15};
 
+    for (int i = 0; i < 512; i++) mbr[i] = 0xff;
     rw_abs_hd(1, 0, 0, 1, mbr);
+    for (int i = 0; i < 512; i++) mbr[i] = 0x0;
     rw_abs_hd(0, 0, 0, 1, mbr);
 
     int i = 0;

@@ -88,7 +88,7 @@ void add_request(HD_REQUEST *req)
         // 硬盘空闲, 立即处理
         this_request = req;
         sti();
-        hd_process();
+        hd_process(); // 硬盘空闲说明一定没有中断在运行, 重新启动处理进程
         return;
     }
     // 否则加入请求队列中
@@ -174,7 +174,7 @@ int hd_busy()
 void bad_rw_intr()
 {
     if (++this_request->errors >= 7) hd_request_fin();
-    if (this_request->errors > 3) hd_reset(this_request->cmd.drive);
+    hd_reset(this_request->cmd.drive);
 }
 
 void read_intr()
@@ -182,7 +182,7 @@ void read_intr()
     if (!hd_cmd_ok())
     {
         bad_rw_intr();
-        hd_process();
+        // hd_process();
         return;
     }
     port_read(ATA_PORT_PRIM_DATA_IO, this_request->buf, 256);
@@ -205,7 +205,7 @@ void write_intr()
     if (!hd_cmd_ok())
     {
         bad_rw_intr();
-        hd_process();
+        // hd_process();
         return;
     }
 
