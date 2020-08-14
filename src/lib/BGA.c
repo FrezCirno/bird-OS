@@ -38,7 +38,7 @@ int bga_get_lfb_addr()
             if (in == 0x11111234)
             {
                 out32(0xcf8, paddr | 0x10); // BAR0
-                return in32(0xcfc);
+                return in32(0xcfc) & 0xfffffff0;
             }
         }
     }

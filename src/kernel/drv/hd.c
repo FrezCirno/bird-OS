@@ -3,24 +3,24 @@
 #include <bird/bird.h> // panic
 #include <bird/proc.h>
 #include <string.h> // memcpy
+#include <glib.h>
 #include <int.h>
 #include <hd.h>
 
 /* main drive struct, one entry per drive */
 struct hd_struct
 {
-    struct
-    {
-        unsigned int base;    //起始扇区LBA
-        unsigned int nsector; //扇区数目
-    } primary[NR_PRIM_PER_DRIVE], logical[NR_SUB_PER_DRIVE];
-} hd[1]; // 只支持一个drive
+    unsigned int base;    //起始扇区LBA
+    unsigned int nsector; //扇区数目
+} hd[1];
 
-#define NR_REQUESTS 32
+#define NR_REQUESTS 32 // 请求队列的长度
 
 void (*hd_callback)(void);        // 发出读/写请求之后的回调
 HD_REQUEST requests[NR_REQUESTS]; // 硬盘请求列表
 HD_REQUEST *this_request;         // 当前发出请求, 在回调中使用
+
+unsigned char buf[512];
 
 #define port_read(port, buf, nword) \
     __asm__("cld;rep insw" ::"d"(port), "D"(buf), "c"(nword))
@@ -31,19 +31,90 @@ HD_REQUEST *this_request;         // 当前发出请求, 在回调中使用
 void init_hd()
 {
     /* Get the number of drives from the BIOS data area */
-    unsigned char *pNrDrives = (unsigned char *)(0x475);
+    unsigned char hd_drives = *(unsigned char *)(0x475);
 
     for (int i = 0; i < NR_REQUESTS; i++)
     {
         requests[i].cmd.drive = -1;
         requests[i].next      = NULL;
     }
-
     hd_callback = NULL;
+    hd_identify(0);
+    // hd_identify(1);
 
     put_irq_handler(INT_VECTOR_IRQ_AT, hd_handler);
     enable_irq(INT_VECTOR_IRQ_AT);
     enable_irq(INT_VECTOR_IRQ_2);
+}
+
+void hd_identify(int drive)
+{
+    struct ata_cmd cmd = {
+        .drive    = drive,
+        .features = 0,
+        .uselba   = 0,
+        .lba      = 0,
+        .nsector  = 0,
+        .command  = ATA_CMD_IDENTIFY,
+    };
+    hd_sendcmd(&cmd, NULL);
+
+    unsigned char isexist = in8(ATA_PORT_PRIM_STATUS_I);
+    if (!isexist) return; // drive not exists
+    if (hd_busy()) return;
+    if (in8(ATA_PORT_PRIM_STATUS_I) & ATA_STATUS_ERR) return;
+
+    port_read(ATA_PORT_PRIM_DATA_IO, buf, 256);
+
+    print_identify_info((unsigned short *)buf);
+
+    unsigned short *hdinfo = (unsigned short *)buf;
+
+    /* Total Nr of User Addressable Sectors */
+    hd[drive].base    = 0;
+    hd[drive].nsector = ((int)hdinfo[61] << 16) + hdinfo[60];
+}
+
+void print_identify_info(unsigned short *hdinfo)
+{
+    char strbuf[512];
+    char s[64];
+
+    struct iden_info_ascii
+    {
+        int idx;
+        int len;
+        char *desc;
+    } iinfo[] = {{10, 20, "HD SN"}, /* Serial number in ASCII */
+                 {27, 40, "HD Model"} /* Model number in ASCII */};
+
+    for (int k = 0; k < sizeof(iinfo) / sizeof(iinfo[0]); k++)
+    {
+        int i   = 0;
+        char *p = (char *)&hdinfo[iinfo[k].idx];
+        for (i = 0; i < iinfo[k].len / 2; i++)
+        {
+            s[i * 2 + 1] = *p++;
+            s[i * 2]     = *p++;
+        }
+        s[i * 2] = 0;
+        sprintf(strbuf, "{HD} %s: %s\n", iinfo[k].desc, s);
+        printstr(strbuf, PEN_WHITE);
+    }
+
+    int capabilities = hdinfo[49];
+    sprintf(strbuf, "{HD} LBA supported: %s\n",
+            (capabilities & 0x0200) ? "Yes" : "No");
+    printstr(strbuf, PEN_WHITE);
+
+    int cmd_set_supported = hdinfo[83];
+    sprintf(strbuf, "{HD} LBA48 supported: %s\n",
+            (cmd_set_supported & 0x0400) ? "Yes" : "No");
+    printstr(strbuf, PEN_WHITE);
+
+    int sectors = ((int)hdinfo[61] << 16) + hdinfo[60];
+    sprintf(strbuf, "{HD} HD size: %dMB\n", sectors * 512 / 1000000);
+    printstr(strbuf, PEN_WHITE);
 }
 
 void hd_handler(unsigned int irq)
@@ -59,21 +130,24 @@ void hd_handler(unsigned int irq)
 void hd_reset(int drive)
 {
     int i;
-    out8(ATA_PORT_PRIM_CMD_O, 4);
 
-    for (int i = 0; i < 1000; i++) nop(); // 等待一段时间.
+    out8(ATA_PORT_PRIM_CTRL_O, ATA_CTRL_SRST); // 重置该总线上的两块硬盘
 
-    out8(ATA_PORT_PRIM_CMD_O, ATA_CMD_NOP);
+    for (int i = 0; i < 1000; i++)
+        ; // 等待一段时间.
+
+    out8(ATA_PORT_PRIM_CTRL_O, 0); // 然后清除该位
 
     if (hd_busy()) panic("hd_reset: still busy");
 
-    if (in8(ATA_PORT_SECO_STATUS_I) == ATA_STATUS_ERR)
+    if (in8(ATA_PORT_PRIM_STATUS_I) == ATA_STATUS_ERR)
         panic("hd_reset: controller reset failed");
 
     struct ata_cmd rstcmd = {
         .drive   = drive,
-        .lba     = hd[0].primary[0].base,
-        .nsector = hd[0].primary[0].nsector,
+        .uselba  = 1,
+        .lba     = hd[0].base,
+        .nsector = hd[0].nsector,
         .command = ATA_CMD_INIT,
     };
     hd_sendcmd(&rstcmd, hd_process);
@@ -113,11 +187,10 @@ void hd_process()
     }
     if (this_request->cmd.command == ATA_CMD_WT_SEC)
     {
-        hd_sendcmd(&this_request->cmd, write_intr);
+        hd_sendcmd(&this_request->cmd, write_intr); // 只发过命令不会有回应
         int r;
         for (int i = 0;
-             i < 100000 && !(r = in8(ATA_PORT_PRIM_STATUS_I) & ATA_STATUS_DRQ);
-             i++)
+             i < 3000 && !(r = in8(ATA_PORT_PRIM_STATUS_I) & ATA_STATUS_DRQ); i++)
             continue;
         if (!r)
         {
@@ -126,6 +199,7 @@ void hd_process()
             return;
         }
         port_write(ATA_PORT_PRIM_DATA_IO, this_request->buf, 256);
+        // 写完数据之后, 等待中断
     }
     else if (this_request->cmd.command == ATA_CMD_RD_SEC)
     {
@@ -158,17 +232,24 @@ int hd_cmd_ok()
 int hd_busy()
 {
     unsigned int i;
-    for (i = 0; i < 10000; i++)
+
+    // wait until BSY=0 or timeout
+    for (int k = 0; k < 100000; k++)
     {
         i = in8(ATA_PORT_PRIM_STATUS_I);
-        if ((i & (ATA_STATUS_BSY | ATA_STATUS_RDY)) == ATA_STATUS_RDY) break;
+        if ((i & (ATA_STATUS_BSY | ATA_STATUS_RDY)) == ATA_STATUS_RDY)
+        {
+            break; // BSY=0, RDY=1
+        }
     }
-    i = in8(ATA_PORT_PRIM_STATUS_I);
 
-    if ((i & ATA_STATUS_BSY | ATA_STATUS_RDY | ATA_STATUS_DRQ)
-        == (ATA_STATUS_RDY | ATA_STATUS_DRQ))
-        return 0;
-    return 1;
+    i = in8(ATA_PORT_PRIM_STATUS_I);
+    i &= (ATA_STATUS_BSY | ATA_STATUS_RDY | ATA_STATUS_DRQ);
+    if ((i & ATA_STATUS_RDY) | (i | ATA_STATUS_DRQ))
+    {
+        return 0; // BSY=0, RDY/DRQ=1
+    }
+    return 1; // BSY=1
 }
 
 void bad_rw_intr()
@@ -182,13 +263,11 @@ void read_intr()
     if (!hd_cmd_ok())
     {
         bad_rw_intr();
-        // hd_process();
         return;
     }
     port_read(ATA_PORT_PRIM_DATA_IO, this_request->buf, 256);
     this_request->errors = 0;
     this_request->buf += 512;
-    this_request->cmd.lba++;
 
     if (--this_request->cmd.nsector)
     {
@@ -202,16 +281,21 @@ void read_intr()
 
 void write_intr()
 {
+    // 单个扇区写入完毕
     if (!hd_cmd_ok())
     {
         bad_rw_intr();
-        // hd_process();
         return;
     }
 
+    this_request->errors = 0;
+    this_request->buf += 512;
+
     if (--this_request->cmd.nsector)
     {
+        // 再写一个扇区, 设置回调
         port_write(ATA_PORT_PRIM_DATA_IO, this_request->buf, 256);
+        hd_callback = write_intr;
         return;
     }
     hd_request_fin();
@@ -251,6 +335,7 @@ repeat:
 
     req->buf          = buf;
     req->cmd.drive    = drive;
+    req->cmd.uselba   = 1;
     req->cmd.lba      = lba;
     req->cmd.nsector  = nsector;
     req->cmd.features = 0;

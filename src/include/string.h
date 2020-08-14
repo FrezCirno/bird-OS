@@ -1,6 +1,10 @@
 // from linux
 #pragma once
 #include <stddef.h>
+#include <stdarg.h>
+
+int sprintf(char *buf, const char *fmt, ...);
+int vsprintf(char *buf, const char *fmt, va_list args);
 
 const char *itoa(int x, int radix);
 

@@ -42,10 +42,6 @@
 #define ATA_DRIVE_DRV      0xA0 | 0x10 // 硬盘号, 0主盘, 1副盘
 #define ATA_DRIVE_LBA      0xA0 | 0x40 // 使用LBA 而非CHS
 
-#define ATA_MAKE_DRIVE(use_lba, use_second, lba3)                           \
-    ((use_lba ? ATA_DRIVE_LBA : 0xA0) | (use_second ? ATA_DRIVE_DRV : 0xA0) \
-     | (lba3 & 0xF))
-
 #define ATA_STATUS_ERR  0x01 // An error occurred, send new cmd/rst to clear it
 #define ATA_STATUS_IDX  0x02 // Index, always 0
 #define ATA_STATUS_CORR 0x04 // Corrected data, always 0
@@ -56,8 +52,14 @@
 #define ATA_STATUS_BSY  0x80 // You'd wait for it to clear
 
 #define ATA_CMD_NOP      0x0
+#define ATA_CMD_RESTORE  0x10 // 驱动器重新校正（驱动器复位）。
 #define ATA_CMD_RD_SEC   0x20 // Read Sectors with Retry
 #define ATA_CMD_WT_SEC   0x30 // Write Sectors with Retry
+#define ATA_CMD_VERIFY   0x40 // 扇区检验。
+#define ATA_CMD_FORMAT   0x50 // 格式化磁道。
+#define ATA_CMD_INIT     0x60 // 控制器初始化。
+#define ATA_CMD_SEEK     0x70 // 寻道。
+#define ATA_CMD_DIAGNOSE 0x90 // 控制器诊断。
 #define ATA_CMD_INIT     0x91 // Initialize Drive Parameters
 #define ATA_CMD_IDENTIFY 0xEC // Identify Device
 
@@ -82,6 +84,7 @@ struct ata_cmd
 {
     unsigned char features;
     unsigned char nsector;
+    unsigned char uselba;
     unsigned int lba; // lba地址, 28位, 会自动转换
     char drive;       // 硬盘号, 0/1
     unsigned char command;

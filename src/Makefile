@@ -56,7 +56,7 @@ kernel.o : init/_start.o init/main.o \
 		kernel/traps.o kernel/syscall.o \
 		kernel/clock.o kernel/keyboard.o kernel/mouse.o \
 		kernel/drv/hd.o kernel/drv/ata.o \
-		kernel/errno.o kernel/panic.o kernel/assert.o \
+		kernel/errno.o kernel/panic.o kernel/assert.o kernel/vsprintf.o \
 		lib/glib.o lib/ctype.o \
 		lib/itoa.o lib/u_vga16.o lib/BGA.o lib/buffer.o \
 		mm/memory.o 
@@ -83,7 +83,7 @@ dump: build
 	objdump -M intel kernel.o -d > dump.txt
 
 clean :
-	-rm -f *.o boot/*.bin init/*.o int/*.o kernel/*.o lib/*.o mm/*.o
+	-rm -f *.o boot/*.bin init/*.o int/*.o kernel/*.o kernel/drv/*.o lib/*.o mm/*.o
 	-rm -f build.img
 
 qemu:
