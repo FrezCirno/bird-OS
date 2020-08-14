@@ -8,6 +8,7 @@
 #include <keyboard.h>
 #include <mouse.h>
 #include <hd.h>
+#include <part.h>
 
 void tty();
 void read();
@@ -15,8 +16,8 @@ void init();
 void fooC();
 
 /* stacks of tasks */
-#define STACK_SIZE_FOO   0x800
-#define STACK_SIZE_TOTAL 0x8000
+#define STACK_SIZE_FOO   0x8000
+#define STACK_SIZE_TOTAL 0x10000
 
 char task_stack[STACK_SIZE_TOTAL]; // 测试程序ABC公用的栈
 
@@ -102,40 +103,31 @@ void main()
 void init()
 {
     // 默认颜色背景, 没有这个会留残影
-    SHEET *bg = alloc_sheet();
-    sheet_setbuf(bg, (unsigned char *)mm_alloc_4k(scr_x * scr_y), scr_x, scr_y,
-                 -1);
-    memset(bg->buf, PEN_BLACK, scr_x * scr_y);
-    movez(bg, 0);
+    // SHEET *bg = alloc_sheet();
+    // sheet_setbuf(bg, (unsigned char *)mm_alloc_4k(scr_x * scr_y), scr_x, scr_y,
+    //              -1);
+    // memset(bg->buf, PEN_BLACK, scr_x * scr_y);
+    // movez(bg, 0);
 
-    SHEET *sht = alloc_sheet();
-    sheet_setbuf(sht, mm_alloc_4k(320 * 200), 320, 200, 0);
-    movexy(sht, 100, 200);
-    movez(sht, ctl->top);
+    // SHEET *sht = alloc_sheet();
+    // sheet_setbuf(sht, mm_alloc_4k(320 * 200), 320, 200, 0);
+    // movexy(sht, 100, 200);
+    // movez(sht, ctl->top);
 
-    unsigned char mbr[512] = {0, 1, 2,  3,  4,  5,  6,  7,
-                              8, 9, 10, 11, 12, 13, 14, 15};
-
-    for (int i = 0; i < 512; i++) mbr[i] = 0xff;
-    rw_abs_hd(1, 0, 0, 1, mbr);
-    for (int i = 0; i < 512; i++) mbr[i] = 0x0;
-    rw_abs_hd(0, 0, 0, 1, mbr);
+    // probe_part();
+    unsigned char buf[512];
 
     int i = 0;
     while (1)
     {
-        // printstr("i", PEN_LIGHT_YELLOW);
-        drawWindowTo(sht->buf, sht->bxsize, 320, 200, "init");
-        for (int j = 0; j < 512; j++)
+        hd_rw(0, 0, i, 1, buf);
+        for (int i = 0; i < 512; i++)
         {
-            int x = 4 + (j * fonts.Width) % sht->bxsize;
-            int y = 24 + (j * fonts.Width) / sht->bxsize * fonts.Height;
-            drawRectTo(sht->buf, sht->bxsize, x, y, 5 * fonts.Width,
-                       fonts.Height, PEN_LIGHT_YELLOW);
-            drawTextTo(sht->buf, sht->bxsize, x, y, itoa(mbr[j], 16), PEN_BLACK);
+            putchar(buf[i], PEN_WHITE);
         }
-
-        refresh_local(sht, 0, 0, 320, 200);
+        // printstr("i", PEN_LIGHT_YELLOW);
+        // drawWindowTo(sht->buf, sht->bxsize, 320, 200, "init");
+        // refresh_local(sht, 0, 0, 320, 200);
         i++;
     }
 
@@ -167,7 +159,7 @@ void tty()
 
     SHEET *sht = alloc_sheet();
     sheet_setbuf(sht, mm_alloc_4k(320 * 200), 320, 200, 0);
-    // rw_abs_hd(0, 0, 0, 1, mbr);
+    // hd_rw(0, 0, 0, 1, mbr);
 
     while (1)
     {

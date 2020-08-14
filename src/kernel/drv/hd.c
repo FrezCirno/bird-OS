@@ -8,11 +8,8 @@
 #include <hd.h>
 
 /* main drive struct, one entry per drive */
-struct hd_struct
-{
-    unsigned int base;    //起始扇区LBA
-    unsigned int nsector; //扇区数目
-} hd[1];
+unsigned char hd_num;
+struct hd_info hd[2];
 
 #define NR_REQUESTS 32 // 请求队列的长度
 
@@ -31,7 +28,12 @@ unsigned char buf[512];
 void init_hd()
 {
     /* Get the number of drives from the BIOS data area */
-    unsigned char hd_drives = *(unsigned char *)(0x475);
+    hd_num = *(unsigned char *)(0x475);
+    printk("HD Drives: %d\n", PEN_WHITE, hd_num);
+    for (unsigned char i = 0; i < hd_num; i++)
+    {
+        hd_identify(i);
+    }
 
     for (int i = 0; i < NR_REQUESTS; i++)
     {
@@ -39,8 +41,6 @@ void init_hd()
         requests[i].next      = NULL;
     }
     hd_callback = NULL;
-    hd_identify(0);
-    // hd_identify(1);
 
     put_irq_handler(INT_VECTOR_IRQ_AT, hd_handler);
     enable_irq(INT_VECTOR_IRQ_AT);
@@ -98,27 +98,24 @@ void print_identify_info(unsigned short *hdinfo)
             s[i * 2]     = *p++;
         }
         s[i * 2] = 0;
-        sprintf(strbuf, "{HD} %s: %s\n", iinfo[k].desc, s);
-        printstr(strbuf, PEN_WHITE);
+        printk("HD count: %s: %s\n", PEN_WHITE, iinfo[k].desc, s);
     }
 
     int capabilities = hdinfo[49];
-    sprintf(strbuf, "{HD} LBA supported: %s\n",
-            (capabilities & 0x0200) ? "Yes" : "No");
-    printstr(strbuf, PEN_WHITE);
+    printk("LBA supported: %s\n", PEN_WHITE,
+           ((capabilities & 0x0200) ? "Yes" : "No"));
 
     int cmd_set_supported = hdinfo[83];
-    sprintf(strbuf, "{HD} LBA48 supported: %s\n",
-            (cmd_set_supported & 0x0400) ? "Yes" : "No");
-    printstr(strbuf, PEN_WHITE);
+    printk("LBA48 supported: %s\n", PEN_WHITE,
+           ((cmd_set_supported & 0x0400) ? "Yes" : "No"));
 
     int sectors = ((int)hdinfo[61] << 16) + hdinfo[60];
-    sprintf(strbuf, "{HD} HD size: %dMB\n", sectors * 512 / 1000000);
-    printstr(strbuf, PEN_WHITE);
+    printk("HD size: %dMB\n", PEN_WHITE, sectors * 512 / 1000000);
 }
 
 void hd_handler(unsigned int irq)
 {
+    printk("HD interrupt\n", PEN_BLUE);
     if (hd_callback != NULL)
     {
         void (*cb)(void) = hd_callback;
@@ -179,6 +176,7 @@ void add_request(HD_REQUEST *req)
 
 void hd_process()
 {
+    printk("HD Process\n", PEN_LIGHT_GRAY);
     // 没有请求, 今日无事
     if (!this_request)
     {
@@ -213,6 +211,7 @@ void hd_process()
 
 void hd_sendcmd(struct ata_cmd *cmd, void (*int_callback)(void))
 {
+    printk("Send cmd for %x\n", PEN_LIGHT_GREEN, cmd->lba);
     hd_callback = int_callback;
     ata_send_cmd(cmd);
 }
@@ -254,6 +253,7 @@ int hd_busy()
 
 void bad_rw_intr()
 {
+    printk("HD failed\n", PEN_RED);
     if (++this_request->errors >= 7) hd_request_fin();
     hd_reset(this_request->cmd.drive);
 }
@@ -306,6 +306,7 @@ void write_intr()
 void hd_request_fin()
 {
     // 完毕, 检查下一个任务
+    printk("request for %x fin.\n", PEN_BLUE, this_request->cmd.lba);
     wake_up(&this_request->proc);
     cli();
     int i;
@@ -322,12 +323,12 @@ void hd_request_fin()
     sti();
 }
 
-void rw_abs_hd(int rw, unsigned char drive, unsigned int lba,
-               unsigned char nsector, unsigned char *buf)
+void hd_rw(int rw, unsigned char drive, unsigned int lba, unsigned char nsector,
+           unsigned char *buf)
 {
     HD_REQUEST *req;
 
-    if (rw != 0 && rw != 1) panic("rw_abs_hd: Bad hd command, must be R/W");
+    if (rw != 0 && rw != 1) panic("hd_rw: Bad hd command, must be R/W");
 repeat:
     for (req = requests; req < requests + NR_REQUESTS; req++)
         if (req->cmd.drive < 0) break;

@@ -1,5 +1,4 @@
-#include <glib.h>   // printstr
-#include <string.h> // itoa
+#include <bird/bird.h> // printstr
 
 // <R0> 异常处理函数
 void exception_handler(unsigned int vec_no, unsigned int err_code,
@@ -29,21 +28,13 @@ void exception_handler(unsigned int vec_no, unsigned int err_code,
 
     int text_color = PEN_WHITE;
 
-    printstr("Exception! --> ", text_color);
-    printstr(err_msg[vec_no], text_color);
-
-    printstr("\nEFLAGS: 0x", text_color);
-    printstr(itoa(eflags, 16), text_color);
-
-    printstr("\nCS: 0x", text_color);
-    printstr(itoa(cs, 16), text_color);
-
-    printstr("\nEIP: 0x", text_color);
-    printstr(itoa(eip, 16), text_color);
+    printk("Exception! --> %s\n", text_color, err_msg[vec_no]);
+    printk("EFLAGS: 0x%x\n", text_color, eflags);
+    printk("CS: 0x%x\n", text_color, cs);
+    printk("EIP: 0x%x\n", text_color, eip);
 
     if (err_code != 0xFFFFFFFF)
     {
-        printstr("\nError code: 0x", text_color);
-        printstr(itoa(err_code, 16), text_color);
+        printk("Error code: 0x%x\n", text_color, err_code);
     }
 }

@@ -44,7 +44,8 @@ start:
         }
         goto start;
     }
-    printstr(current->name, PEN_WHITE);
+    fillRect(scr_x - 8, 0, scr_x, 16, PEN_BLACK);
+    drawChar(scr_x - 8, 0, current->name[0], PEN_WHITE);
 }
 
 void *get_proc_laddr(int pid, void *offset)
@@ -82,9 +83,11 @@ void sleep_on(PROCESS **queue)
     *queue = current;
     // 进入休眠状态
     current->state = SLEEPING;
+    printk("Process %s sleep...\n", PEN_RED, current->name);
     // 重新调度
     schedule();
     nothing(); // 利用系统调用重新调度
     // !!我被唤醒了, 依次唤醒前面的任务
+    printk("Process %s wakeup...\n", PEN_RED, current->name);
     if (prev) prev->state = RUNNING;
 }

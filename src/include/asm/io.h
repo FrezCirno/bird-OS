@@ -1,4 +1,15 @@
 #pragma once
+// #include <bird/bird.h>
+// static inline void sti()
+// {
+//     printk("sti", PEN_BLUE);
+//     __asm__("sti");
+// }
+// static inline void cli()
+// {
+//     printk("cli", PEN_BLUE);
+//     __asm__("cli");
+// }
 
 #define nop() __asm__("nop")
 

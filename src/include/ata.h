@@ -55,9 +55,7 @@
 #define ATA_CMD_RESTORE  0x10 // 驱动器重新校正（驱动器复位）。
 #define ATA_CMD_RD_SEC   0x20 // Read Sectors with Retry
 #define ATA_CMD_WT_SEC   0x30 // Write Sectors with Retry
-#define ATA_CMD_VERIFY   0x40 // 扇区检验。
 #define ATA_CMD_FORMAT   0x50 // 格式化磁道。
-#define ATA_CMD_INIT     0x60 // 控制器初始化。
 #define ATA_CMD_SEEK     0x70 // 寻道。
 #define ATA_CMD_DIAGNOSE 0x90 // 控制器诊断。
 #define ATA_CMD_INIT     0x91 // Initialize Drive Parameters

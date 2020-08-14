@@ -318,15 +318,18 @@ void putchar(char ch, int color)
 {
     if (ch == '\n')
     {
+        fillRect(cur_x, cur_y, scr_x, cur_y + 16, PEN_BLACK);
         cur_x = 0;
         cur_y += fonts.Height;
     }
     else if (ch == '\t')
     {
+        fillRect(cur_x, cur_y, cur_x + 32, cur_y + 16, PEN_BLACK);
         cur_x += 4 * fonts.Width;
     }
     else
     {
+        fillRect(cur_x, cur_y, cur_x + 8, cur_y + 16, PEN_BLACK);
         drawChar(cur_x, cur_y, ch, color);
         cur_x += fonts.Width;
     }
@@ -335,7 +338,7 @@ void putchar(char ch, int color)
         cur_x = 0;
         cur_y += fonts.Height;
     }
-    if (cur_y >= scr_y)
+    if (cur_y + fonts.Height >= scr_y)
     {
         cur_y = 0;
     }

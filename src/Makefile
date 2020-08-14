@@ -55,8 +55,8 @@ kernel.o : init/_start.o init/main.o \
 		kernel/protect.o kernel/proc.o kernel/sched.o \
 		kernel/traps.o kernel/syscall.o \
 		kernel/clock.o kernel/keyboard.o kernel/mouse.o \
-		kernel/drv/hd.o kernel/drv/ata.o \
-		kernel/errno.o kernel/panic.o kernel/assert.o kernel/vsprintf.o \
+		kernel/drv/hd.o kernel/drv/ata.o kernel/drv/part.o \
+		kernel/errno.o kernel/bird.o kernel/assert.o kernel/vsprintf.o \
 		lib/glib.o lib/ctype.o \
 		lib/itoa.o lib/u_vga16.o lib/BGA.o lib/buffer.o \
 		mm/memory.o 
@@ -95,11 +95,10 @@ qemu:
 	  -fda build.img                                 \
       -drive format=raw,file=80m.img                 \
 	  -gdb tcp::1234                                 \
+	  -boot d                                        \
 	  -S                                             \
 	  -smp 1                                         \
 	  -vga std &
-	#   -serial stdio                                  \
-	#   -usb                                          
 	gdb
 
 rebuild: clean build

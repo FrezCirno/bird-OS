@@ -4,7 +4,7 @@
 
 #define STR_DEFAULT_LEN 1024
 
-int vsprintf(char *buf, const char *fmt, va_list args)
+int vsprintf(char *buf, const char *fmt, va_list ap)
 {
     char *pbuf = buf;
     int m;
@@ -45,27 +45,24 @@ int vsprintf(char *buf, const char *fmt, va_list args)
         switch (*fmt)
         {
         case 'c': // %0?\d*c
-            *qbuf++ = *(char *)args;
-            args += 4;
+            *qbuf++ = va_arg(ap, char);
             break;
         case 'x': // %0?\d*x
-            m   = *(int *)args;
+            m   = va_arg(ap, int);
             tmp = itoa(m, 16);
             strcpy(qbuf, tmp);
             qbuf += strlen(tmp);
-            args += 4;
             break;
         case 'd': // %0?\d*d
-            m   = *(int *)args;
+            m   = va_arg(ap, int);
             tmp = itoa(m, 10);
             strcpy(qbuf, tmp);
             qbuf += strlen(tmp);
-            args += 4;
             break;
         case 's': // %0?\d*s
-            strcpy(qbuf, *(char **)args);
-            qbuf += strlen(*(char **)args);
-            args += 4;
+            tmp = va_arg(ap, char *);
+            strcpy(qbuf, tmp);
+            qbuf += strlen(tmp);
             break;
         default: break; // %0?\d*[^cxds] 不处理
         }
@@ -82,7 +79,10 @@ int vsprintf(char *buf, const char *fmt, va_list args)
 
 int sprintf(char *buf, const char *fmt, ...)
 {
-    va_list arg =
-        (va_list)((char *)(&fmt) + 4); /* 4 是参数 fmt 所占堆栈中的大小 */
-    return vsprintf(buf, fmt, arg);
+    int ret;
+    va_list ap;
+    va_start(ap, fmt);
+    ret = vsprintf(buf, fmt, ap);
+    va_end(ap);
+    return ret;
 }
