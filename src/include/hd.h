@@ -13,10 +13,10 @@ extern struct hd_info hd[];
 
 typedef struct s_hd_request
 {
-    // int device;         // 设备号
     struct ata_cmd cmd;        // 存储需要执行的指令
     unsigned char *buf;        // 读/写的缓冲区
     int errors;                // 错误次数
+    int lock;                  // 是否锁定
     PROCESS *proc;             // 发出请求的进程
     struct s_hd_request *next; // 静态链表
 } HD_REQUEST;
@@ -62,3 +62,5 @@ void hd_rw(int rw, unsigned char drive, unsigned int lba, unsigned char nsector,
 
 void print_identify_info(unsigned short *hdinfo);
 void hd_identify(int drive);
+void wait_request(HD_REQUEST *req);
+void unlock_request(HD_REQUEST *req);

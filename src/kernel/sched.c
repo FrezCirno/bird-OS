@@ -121,10 +121,12 @@ void init()
     while (1)
     {
         hd_rw(0, 0, i, 1, buf);
+        printk("\nSector %d\n", PEN_WHITE, i);
         for (int i = 0; i < 512; i++)
         {
-            putchar(buf[i], PEN_WHITE);
+            printk("%02x", PEN_WHITE, buf[i]);
         }
+        printk("\n", PEN_WHITE);
         // printstr("i", PEN_LIGHT_YELLOW);
         // drawWindowTo(sht->buf, sht->bxsize, 320, 200, "init");
         // refresh_local(sht, 0, 0, 320, 200);

@@ -37,10 +37,10 @@
 #define ATA_ERROR_UNC   0x40 // Uncorrectable data error.
 #define ATA_ERROR_BBK   0x80 // Bad Block detected.
 
-#define ATA_DRIVE_LBA3     0xA0 | 0xf  // LBA模式高4位
-#define ATA_DRIVE_CHS_HEAD 0xA0 | 0xf  // CHS模式磁头号
-#define ATA_DRIVE_DRV      0xA0 | 0x10 // 硬盘号, 0主盘, 1副盘
-#define ATA_DRIVE_LBA      0xA0 | 0x40 // 使用LBA 而非CHS
+#define ATA_DRIVE_LBA3     (0xA0 | 0xf)  // LBA模式高4位
+#define ATA_DRIVE_CHS_HEAD (0xA0 | 0xf)  // CHS模式磁头号
+#define ATA_DRIVE_DRV      (0xA0 | 0x10) // 硬盘号, 0主盘, 1副盘
+#define ATA_DRIVE_LBA      (0xA0 | 0x40) // 使用LBA 而非CHS
 
 #define ATA_STATUS_ERR  0x01 // An error occurred, send new cmd/rst to clear it
 #define ATA_STATUS_IDX  0x02 // Index, always 0

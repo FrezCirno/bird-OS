@@ -3,9 +3,14 @@
 
 unsigned char cur_drive;
 
-#define ATA_MAKE_DRIVE(use_lba, drive, lba3)                           \
-    ((use_lba ? ATA_DRIVE_LBA : 0xA0) | (drive ? ATA_DRIVE_DRV : 0xA0) \
-     | (lba3 & 0xF))
+unsigned short ATA_MAKE_DRIVE(int use_lba, int drive, int lba3)
+{
+    unsigned short ret = (use_lba ? 0xE0 : 0xA0) | (drive << 4) | ((lba3)&0xF);
+    return ret;
+}
+// #define ATA_MAKE_DRIVE(use_lba, drive, lba3)                           \
+//     (((use_lba) ? ATA_DRIVE_LBA : 0xA0) | ((drive) ? ATA_DRIVE_DRV : 0xA0) \
+//      | ((lba3) & 0xF))
 
 unsigned char ata_read_status(unsigned char drive)
 {
@@ -38,7 +43,8 @@ void ata_send_cmd(struct ata_cmd *cmd)
     out8(ATA_PORT_PRIM_LBA0_IO, cmd->lba & 0xff);
     out8(ATA_PORT_PRIM_LBA1_IO, cmd->lba >> 8 & 0xff);
     out8(ATA_PORT_PRIM_LBA2_IO, cmd->lba >> 16 & 0xff);
-    out8(ATA_PORT_PRIM_DRIVE_IO,
-         ATA_MAKE_DRIVE(cmd->uselba, cmd->drive, cmd->lba >> 24 & 0xf));
+    out8(ATA_PORT_PRIM_DRIVE_IO, (cmd->uselba ? 0xE0 : 0xA0) | (cmd->drive << 4)
+                                     | (cmd->lba >> 24 & 0xF));
+    //  ATA_MAKE_DRIVE(cmd->uselba, cmd->drive, cmd->lba >> 24 & 0xf));
     out8(ATA_PORT_PRIM_CMD_O, cmd->command);
 }

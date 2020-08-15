@@ -15,6 +15,7 @@ struct hd_info hd[2];
 
 void (*hd_callback)(void);        // 发出读/写请求之后的回调
 HD_REQUEST requests[NR_REQUESTS]; // 硬盘请求列表
+PROCESS *wait_queue;              // 当requests队列满的时候的等待区
 HD_REQUEST *this_request;         // 当前发出请求, 在回调中使用
 
 unsigned char buf[512];
@@ -302,12 +303,28 @@ void write_intr()
     // 不让硬盘空闲, 看看有没有下一个任务
     hd_process();
 }
-
+void lock_request(HD_REQUEST *req)
+{
+    req->lock = 1;
+}
+void unlock_request(HD_REQUEST *req)
+{
+    if (!req->lock) printk("hd.c: free buffer being unlocked\n", PEN_RED);
+    req->lock = 0;
+    wake_up(&req->proc);
+}
+void wait_request(HD_REQUEST *req)
+{
+    cli();
+    while (req->lock) sleep_on(&req->proc);
+    sti();
+}
 void hd_request_fin()
 {
     // 完毕, 检查下一个任务
     printk("request for %x fin.\n", PEN_BLUE, this_request->cmd.lba);
-    wake_up(&this_request->proc);
+    wake_up(&wait_queue);
+    unlock_request(this_request);
     cli();
     int i;
     for (i = 0; i < 31; i++)
@@ -321,6 +338,7 @@ void hd_request_fin()
     else
         this_request = NULL;
     sti();
+    hd_process();
 }
 
 void hd_rw(int rw, unsigned char drive, unsigned int lba, unsigned char nsector,
@@ -329,10 +347,17 @@ void hd_rw(int rw, unsigned char drive, unsigned int lba, unsigned char nsector,
     HD_REQUEST *req;
 
     if (rw != 0 && rw != 1) panic("hd_rw: Bad hd command, must be R/W");
+
 repeat:
     for (req = requests; req < requests + NR_REQUESTS; req++)
         if (req->cmd.drive < 0) break;
-    if (req == requests + NR_REQUESTS) goto repeat;
+    if (req == requests + NR_REQUESTS)
+    {
+        sleep_on(&wait_queue);
+        goto repeat;
+    }
+
+    lock_request(req);
 
     req->buf          = buf;
     req->cmd.drive    = drive;
@@ -343,6 +368,7 @@ repeat:
     req->cmd.command  = ((rw == 0) ? ATA_CMD_RD_SEC : ATA_CMD_WT_SEC);
     req->errors       = 0;
     req->next         = NULL;
+
     add_request(req);
-    sleep_on(&req->proc);
+    wait_request(req);
 }
